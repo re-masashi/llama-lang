@@ -1,0 +1,16 @@
+[package]
+name = "llamac"
+version = "0.0.1"
+authors = ["Nafi Amaan Hossain"]
+edition = "2018"
+
+description = "A simple 'TOY' language."
+license = "MIT"
+readme = "README.md"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+llvm-sys = "130"
+
