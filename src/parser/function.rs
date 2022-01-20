@@ -114,7 +114,7 @@ impl Parser {
 		 }
 	} // end of parse_extern
 
-		pub fn parse_function(&mut self) -> Result<Function>{
+	pub fn parse_function(&mut self) -> Result<Function>{
 			let name: String;
 			let return_type: String;
 			let mut args = HashMap::new(); // Map<NAME, TYPE>
@@ -191,6 +191,6 @@ impl Parser {
 			 	},
 			 	_ => Err("PASS".to_string()),
 			 }
-		}
+	}
 }
 

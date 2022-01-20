@@ -6,7 +6,7 @@ macro_rules! unwrap_some {
     ($val:expr) => {
         match $val {
             Some(s) => s,
-            _ => panic!(),
+            None => return Err("EOF".to_string()),
         }
     };
 }

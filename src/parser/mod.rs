@@ -18,15 +18,18 @@ pub enum Program{
 
 #[derive(Debug)]
 pub enum ExprValue{
-    FnCall(String, HashMap<String,String>),
+    FnCall(String, Vec<ExprValue>),
     UnOp(Box<TokenType>, Box<ExprValue>),
+    BinOp(Box<ExprValue>,Box<TokenType>,Box<ExprValue>),
     Boolean(bool),
     Integer(i32),
     Str(String),
     Identifier(String),
     VarDecl{name:String, type_:String},
     IfElse{cond:Box<ExprValue>, if_:Box<ExprValue>, else_:Box<ExprValue>},
-    Assign{name:String, value:Box<ExprValue>}
+    Assign{name:String, value:Box<ExprValue>},
+    AugAssign{name:String, op: Box<TokenType>, value:Box<ExprValue>},
+    Return(Box<ExprValue>)
 }
 
 // 'extern' name (args) '->' return_type
@@ -55,6 +58,22 @@ impl Parser {
 
     pub fn new(tokens: TokenIter) -> Self {
         Parser { tokens }
+    }
+
+    pub fn get_tok_precedence(&mut self, tok: TokenType) -> i32{
+        match tok {
+            TokenType::Equal
+            |TokenType::NotEq
+            |TokenType::Greater
+            |TokenType::GreaterEq
+            |TokenType::Less
+            |TokenType::LessEq => 0,
+            TokenType::Minus
+            |TokenType::Plus => 1,
+            TokenType::DivEq
+            |TokenType::Mul => 2,
+            any => panic!("Bad operator! Unknown {:?}", any),
+        }
     }
 
 }
