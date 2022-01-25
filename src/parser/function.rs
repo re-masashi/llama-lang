@@ -1,4 +1,4 @@
-use crate::parser::{Parser, External, Function};
+use crate::parser::{Parser, External, Function, ExprValue};
 use crate::lexer::tokens::{Token, TokenType};
 use crate::{unwrap_some, Result};
 use std::collections::HashMap;
@@ -115,82 +115,97 @@ impl Parser {
 	} // end of parse_extern
 
 	pub fn parse_function(&mut self) -> Result<Function>{
-			let name: String;
-			let return_type: String;
-			let mut args = HashMap::new(); // Map<NAME, TYPE>
-			match self.tokens.peek() {
+		let name: String;
+		let return_type: String;
+		let mut args = HashMap::new(); // Map<NAME, TYPE> of type <String, String>
+		let mut expressions: Vec<ExprValue> = Vec::new(); 
+		match self.tokens.peek() {
 
-			 	Some(Token{type_, pos:_, line_no:_ }) if type_ == &TokenType::Extern => {
+			Some(Token{type_, pos:_, line_no:_ }) if type_ == &TokenType::Extern => {
 
 			 		self.tokens.next(); // Eat Def
 
-			 		loop{match unwrap_some!(self.tokens.peek()){
-			 			Token{
-							type_:TokenType::Identifier(_),
-							pos:_,
-							line_no:_
-						} => {break;}
-			 			_ => return Err("Syntax Error: expected Identifier after keyword 'extern'".to_string()),
-			 		}} // This is ugly, but works. `loop` just to use break in match
-			 		
-	                // Eat and store
-			 		match unwrap_some!(self.tokens.next()).type_{ 
-			 			TokenType::Identifier(n) => name = n, // Always matches
-			 			_ => unreachable!(), // never happens
-			 		}
-			 		
-	                if unwrap_some!(self.tokens.peek()).type_ != TokenType::LParen {
-			 			return Err("Syntax Error: expected '(' after Identifier".to_string())
-			 		}
-			 		
-	                self.tokens.next(); // Eat '('
-			 		
-	                if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
-			 			self.tokens.next(); // Eat ')'
-			 		}
+			 		loop{
+			 			match unwrap_some!(self.tokens.peek()){
+				 			Token{
+								type_:TokenType::Identifier(_),
+								pos:_,
+								line_no:_
+							} => {break;}
+				 			_ => return Err("Syntax Error: expected Identifier after keyword 'extern'".to_string()),
+				 		}
+				 	} // This is ugly, but works. `loop` just to use break in match
+				 		
+		                // Eat and store
+				 	match unwrap_some!(self.tokens.next()).type_{ 
+				 		TokenType::Identifier(n) => name = n, // Always matches
+				 			_ => unreachable!(), // never happens
+				 	}
+				 		
+		            if unwrap_some!(self.tokens.peek()).type_ != TokenType::LParen {
+				 		return Err("Syntax Error: expected '(' after Identifier".to_string())
+				 	}
+				 		
+		            self.tokens.next(); // Eat '('
+				 		
+		            if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
+				 		self.tokens.next(); // Eat ')'
+				 	}
 
-			 		else {
-			 			loop {
-			 				if unwrap_some!(self.tokens.peek()).type_ == TokenType::Comma {
-			 					self.tokens.next(); // Eat ','
-			 					continue;
-			 				}
-			 				if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
-			 					self.tokens.next(); // Eat ')'
-			 					break;
-			 				}
-			 				let type_annot = self.parse_type_annot();
-			 				match type_annot {
-			 					Ok((n, t)) => args.insert(n, t),
-			 					Err(e) => {
-			 						return Err(e);
-			 					},
-			 				};
-			 			}
-			 		}
+				 	else {
+				 		loop {
+				 			if unwrap_some!(self.tokens.peek()).type_ == TokenType::Comma {
+				 				self.tokens.next(); // Eat ','
+				 				continue;
+				 			}
+				 			if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
+				 				self.tokens.next(); // Eat ')'
+				 				break;
+				 			}
+				 			let type_annot = self.parse_type_annot();
+				 			match type_annot {
+				 				Ok((n, t)) => args.insert(n, t),
+				 				Err(e) => {
+				 					return Err(e);
+				 				},
+				 			};
+				 		}
+				 	}
 
-	                if unwrap_some!(self.tokens.peek()).type_ != TokenType::Arrow{
-			 			return Err("expected '->'".to_string())
-			 		}
+		            if unwrap_some!(self.tokens.peek()).type_ != TokenType::Arrow{
+				 		return Err("expected '->'".to_string())
+				 	}
 
-			 		self.tokens.next(); // Eat '->'
+				 	self.tokens.next(); // Eat '->'
 
-			 		match &unwrap_some!(self.tokens.peek()).type_{ 
-			 			TokenType::Identifier(n) => return_type = n.to_string(), 
-			 			_ => return Err("expected return type_".to_string()),
-			 		}
+				 	match &unwrap_some!(self.tokens.peek()).type_{ 
+				 		TokenType::Identifier(n) => return_type = n.to_string(), 
+				 		_ => return Err("expected return type_".to_string()),
+				 	}
 
-	                if unwrap_some!(self.tokens.peek()).type_ != TokenType::LBrace{
-			 			return Err("expected '{'".to_string());
-			 		}
+		            if unwrap_some!(self.tokens.peek()).type_ != TokenType::LBrace{
+				 		return Err("expected '{'".to_string());
+				 	}
 
-			 		self.tokens.next(); //Eat '{'
-			 		// self.parse_expression();
-			 		unimplemented!(); // Implement `parse_expression` then come here.
-			 		// return Ok(Function{name:name, args:args, return_type: return_type, expressions:expressions})
-			 	},
-			 	_ => Err("PASS".to_string()),
-			 }
+				 	self.tokens.next(); // Eat '{'
+				 	loop {
+				 		match self.parse_expression() {
+				 			Ok(expr) => expressions.insert(expressions.len(),expr),
+				 			Err(s) => return Err(s),
+				 		}
+				 		match unwrap_some!(self.tokens.peek()).type_ {
+				 			TokenType::Semicolon => {self.tokens.next(); continue;}, 
+				 			_ => {break}
+				 		}
+				 	}
+				 	if unwrap_some!(self.tokens.peek()).type_ != TokenType::RBrace{
+				 		return Err("expected '}'".to_string());
+				 	}
+				 	self.tokens.next();
+				 	return Ok(Function{name: name, args:args, expressions: expressions, return_type: return_type})
+			},
+			_ => Err("PASS".to_string()),
+		}
 	}
-}
 
+}

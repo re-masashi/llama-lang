@@ -10,7 +10,7 @@ type TokenIter = Peekable<IntoIter<Token>>;
 
 //the top-level
 #[derive(Debug)]
-pub enum Program{
+pub enum AstNode{
     Extern(External),
     FunctionDef(Function),
     Expression(Box<ExprValue>) // Valid in top-level and in functions

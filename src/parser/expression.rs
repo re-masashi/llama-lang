@@ -31,6 +31,41 @@ impl Parser {
 			_ => unreachable!()
 		};
 		// The functions above will eat the value, then we can proceed to check for a bin op.
+		loop {
+			let op: TokenType = match unwrap_some!(self.tokens.peek()).type_ {
+				TokenType::Plus
+				|TokenType::Minus 
+				|TokenType::Div 
+				|TokenType::Mul 
+				|TokenType::Less 
+				|TokenType::LessEq 
+				|TokenType::Greater 
+				|TokenType::GreaterEq 
+				|TokenType::Equal 
+				|TokenType::NotEq => unwrap_some!(self.tokens.next()).type_,
+				_ => return l_value,
+			};
+			let r_value = self.parse_expression();
+			match unwrap_some!(self.tokens.peek()).type_ {
+				TokenType::Plus
+				|TokenType::Minus 
+				|TokenType::Div 
+				|TokenType::Mul 
+				|TokenType::Less 
+				|TokenType::LessEq 
+				|TokenType::Greater 
+				|TokenType::GreaterEq 
+				|TokenType::Equal 
+				|TokenType::NotEq => continue, // Leave it at this stage, let the loop start with binop search again.
+				_ => return Ok(
+						ExprValue::BinOp(
+							Box::new(l_value.unwrap()),
+							Box::new(op),
+							Box::new(r_value.unwrap())
+						)
+					),
+			};
+		}
 	}
 
 	pub fn parse_unop(&mut self) -> Result<ExprValue>{
