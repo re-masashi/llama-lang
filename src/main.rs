@@ -1,5 +1,5 @@
 use std::process;
-use llamac::{lexer::Lexer};
+use llamac::{lexer::Lexer, parser::Parser};
 
 macro_rules! unwrap_or_exit {
     ($f:expr, $origin:tt) => {
@@ -18,7 +18,6 @@ pub fn main() {
     let tokens = lexer
         .map(|t| unwrap_or_exit!(t, "Lexing"))
         .collect::<Vec<_>>();
-    for token in tokens{
-        println!("{:?}",token );
-    }
+    let mut parser = Parser::new(tokens.into_iter().peekable());
+    println!("{:#?}", parser.parse_program());
 }

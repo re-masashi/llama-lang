@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 pub mod function;
 pub mod expression;
+pub mod program;
 
 type TokenIter = Peekable<IntoIter<Token>>;
 

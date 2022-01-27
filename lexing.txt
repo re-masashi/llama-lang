@@ -1,17 +1,10 @@
-# This is not a proggram, it just tests the lexer.
-if (a) { 
-	1+1;
-}
-else{
-	let x = 2; 
-	let y = "abc";
-	x = x+2;
-	x += 2;
-}
-extern a_void_fn()->void;
-
-def dosomething (a:int,b:int)->int{
-	x = true;
-	return sit();
+if(true){
+`	1+2
+}else {
+	1+1+1+1--2
 }
 
+
+
+
+EOF

@@ -20,7 +20,7 @@ impl Parser {
 		let name = match unwrap_some!(self.tokens.next()).type_{ TokenType::Identifier(s)=>s, _=>unreachable!()};
 		// Check if colon exists.
 		loop{match unwrap_some!(self.tokens.peek()) { Token{
-				type_:TokenType::Comma,
+				type_:TokenType::Colon,
 				pos:_,
 				line_no:_
 			} => {break;} //ugly but works..
@@ -121,7 +121,7 @@ impl Parser {
 		let mut expressions: Vec<ExprValue> = Vec::new(); 
 		match self.tokens.peek() {
 
-			Some(Token{type_, pos:_, line_no:_ }) if type_ == &TokenType::Extern => {
+			Some(Token{type_, pos:_, line_no:_ }) if type_ == &TokenType::Def => {
 
 			 		self.tokens.next(); // Eat Def
 
@@ -193,6 +193,7 @@ impl Parser {
 				 			Ok(expr) => expressions.insert(expressions.len(),expr),
 				 			Err(s) => return Err(s),
 				 		}
+				 		// Eat the semicolons
 				 		match unwrap_some!(self.tokens.peek()).type_ {
 				 			TokenType::Semicolon => {self.tokens.next(); continue;}, 
 				 			_ => {break}

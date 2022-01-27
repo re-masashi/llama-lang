@@ -5,7 +5,7 @@ use crate::{unwrap_some,Result};
 impl Parser {
 
 	pub fn parse_expression(&mut self)->Result<ExprValue>{
-		unimplemented!();
+		println!("Expression parser is at {:?}", self.tokens.peek());
 		let l_value: Result<ExprValue> = match unwrap_some!(self.tokens.peek()).type_ {
 			TokenType::LParen => {
 				self.tokens.next();
@@ -28,7 +28,11 @@ impl Parser {
 
 			TokenType::Return => self.parse_return(),
 
-			_ => unreachable!()
+			TokenType::Integer(i) => {
+				self.tokens.next(); Ok(ExprValue::Integer(i))
+			},
+
+			_ => panic!("Not a valid expression {:?}", self.tokens.peek())
 		};
 		// The functions above will eat the value, then we can proceed to check for a bin op.
 		loop {
@@ -92,7 +96,7 @@ impl Parser {
 
 	pub fn parse_if_else(&mut self) -> Result<ExprValue> {
 		self.tokens.next(); // Eat 'if'
-		if unwrap_some!(self.tokens.next()).type_ == TokenType::LParen{
+		if unwrap_some!(self.tokens.peek()).type_ == TokenType::LParen{
 			self.tokens.next(); // Eat '('
 		}
 		else {
@@ -101,10 +105,11 @@ impl Parser {
 
 		let cond = Box::new(self.parse_expression().unwrap());
 
-		if unwrap_some!(self.tokens.next()).type_ == TokenType::RParen{
+		if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
 			self.tokens.next(); // Eat ')'
 		}
 		else {
+			println!("{:?}", unwrap_some!(self.tokens.peek())); 
 			return Err("Missing closing parenthesis".to_string());
 		}
 
@@ -117,21 +122,21 @@ impl Parser {
 
 		let if_arm = Box::new(self.parse_expression().unwrap());
 
-		if unwrap_some!(self.tokens.next()).type_ == TokenType::RBrace{
+		if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
 			self.tokens.next(); // Eat '}'
 		}
 		else {
-			return Err("Missing closing '{'".to_string());
+			return Err("Missing closing '}' at if".to_string());
 		}
 
-		if unwrap_some!(self.tokens.next()).type_ == TokenType::Else{
+		if unwrap_some!(self.tokens.peek()).type_ == TokenType::Else{
 			self.tokens.next(); // Eat 'else'
 		}
 		else {
 			return Err("`if` without `else` not allowed.".to_string());
 		}
 
-		if unwrap_some!(self.tokens.next()).type_ == TokenType::LBrace{
+		if unwrap_some!(self.tokens.peek()).type_ == TokenType::LBrace{
 			self.tokens.next(); // Eat '{'
 		}
 		else {
@@ -140,11 +145,11 @@ impl Parser {
 
 		let else_arm = Box::new(self.parse_expression().unwrap());
 
-		if unwrap_some!(self.tokens.next()).type_ == TokenType::RBrace{
+		if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
 			self.tokens.next(); // Eat '}'
 		}
 		else {
-			return Err("Missing closing '}'.".to_string());
+			return Err("Missing closing '}' at else.".to_string());
 		}
 		return Ok(ExprValue::IfElse{cond:cond, if_:if_arm, else_:else_arm});
 	}
@@ -249,7 +254,7 @@ impl Parser {
 				return Ok(ExprValue::FnCall(name, values))
 			}
 		}
-		return Err("Expected ',' or '('".to_string() )
+		return Ok(ExprValue::Identifier(name) )
 	}
 
 	pub fn parse_return(&mut self) -> Result<ExprValue>{
