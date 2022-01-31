@@ -32,7 +32,7 @@ impl Parser {
 				self.tokens.next(); Ok(ExprValue::Integer(i))
 			},
 
-			_ => panic!("Not a valid expression {:?}", self.tokens.peek())
+			_ => return Err("Invalid expression".to_string())
 		};
 		// The functions above will eat the value, then we can proceed to check for a bin op.
 		loop {
@@ -96,6 +96,8 @@ impl Parser {
 
 	pub fn parse_if_else(&mut self) -> Result<ExprValue> {
 		self.tokens.next(); // Eat 'if'
+		let mut expressions_if: Vec<ExprValue> = Vec::new();
+		let mut expressions_else: Vec<ExprValue> = Vec::new();
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::LParen{
 			self.tokens.next(); // Eat '('
 		}
@@ -120,7 +122,26 @@ impl Parser {
 			return Err("Expected '{' .".to_string());
 		}
 
-		let if_arm = Box::new(self.parse_expression().unwrap());
+		loop {
+			match self.parse_expression() {
+				Ok(expr) => expressions_if.insert(expressions_if.len(),expr),
+				Err(e) if e == "Invalid expression" => {
+					if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
+						break;
+					}
+					else {
+						return Err(e)
+					}
+				},
+				Err(e) => return Err(e),
+
+			}
+			// Eat the semicolons
+			match unwrap_some!(self.tokens.peek()).type_ {
+				TokenType::Semicolon => {self.tokens.next(); continue;}, 
+				_ => {break}
+			}
+		}
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
 			self.tokens.next(); // Eat '}'
@@ -143,7 +164,26 @@ impl Parser {
 			return Err("Expected '{'.".to_string());
 		}
 
-		let else_arm = Box::new(self.parse_expression().unwrap());
+		loop {
+			match self.parse_expression() {
+				Ok(expr) => expressions_else.insert(expressions_else.len(),expr),
+				Err(e) if e == "Invalid expression" => {
+					if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
+						break;
+					}
+					else {
+						return Err(e)
+					}
+				},
+				Err(e) => return Err(e),
+
+			}
+			// Eat the semicolons
+			match unwrap_some!(self.tokens.peek()).type_ {
+				TokenType::Semicolon => {self.tokens.next(); continue;}, 
+				_ => {break}
+			}
+		}
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
 			self.tokens.next(); // Eat '}'
@@ -151,7 +191,12 @@ impl Parser {
 		else {
 			return Err("Missing closing '}' at else.".to_string());
 		}
-		return Ok(ExprValue::IfElse{cond:cond, if_:if_arm, else_:else_arm});
+		return Ok(
+			ExprValue::IfElse{
+				cond:cond,
+				if_:expressions_if,
+				else_:expressions_else
+			});
 	}
 
 	pub fn parse_declaration(&mut self) -> Result<ExprValue> {
@@ -264,3 +309,4 @@ impl Parser {
 	}
 
 }
+

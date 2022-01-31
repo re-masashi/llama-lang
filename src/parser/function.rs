@@ -50,7 +50,7 @@ impl Parser {
 
 		 	Some(Token{type_, pos:_, line_no:_ }) if type_ == &TokenType::Extern => {
 
-		 		self.tokens.next(); // Eat Def
+		 		self.tokens.next(); // Eat extern
 
 		 		loop{match unwrap_some!(self.tokens.peek()){
 		 			Token{
@@ -104,8 +104,18 @@ impl Parser {
 		 		self.tokens.next(); // Eat '->'
 
 		 		match &unwrap_some!(self.tokens.peek()).type_{ 
-		 			TokenType::Identifier(n) => return_type = n.to_string(), 
-		 			_ => return Err("expected return type_".to_string()),
+		 			TokenType::Identifier(n) => {
+		 				return_type = n.to_string()
+		 			}, 
+		 			_ => return Err("expected return type after extern".to_string()),
+		 		}
+		 		self.tokens.next(); // Eat the identifier
+
+		 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::Semicolon{
+		 			self.tokens.next(); //Eat semicolon
+		 		}
+		 		else {
+		 			return Err("Semicolon after extern is mandatory.".to_string())
 		 		}
 
 		 		return Ok(External{name:name, args:args, return_type: return_type})
@@ -179,19 +189,29 @@ impl Parser {
 				 	self.tokens.next(); // Eat '->'
 
 				 	match &unwrap_some!(self.tokens.peek()).type_{ 
-				 		TokenType::Identifier(n) => return_type = n.to_string(), 
+				 		TokenType::Identifier(n) => {return_type = n.to_string()}, 
 				 		_ => return Err("expected return type_".to_string()),
 				 	}
+				 	self.tokens.next(); // Eat the return_type
 
 		            if unwrap_some!(self.tokens.peek()).type_ != TokenType::LBrace{
-				 		return Err("expected '{'".to_string());
+				 		return Err("expected '{' in fn def".to_string());
 				 	}
 
 				 	self.tokens.next(); // Eat '{'
 				 	loop {
 				 		match self.parse_expression() {
 				 			Ok(expr) => expressions.insert(expressions.len(),expr),
-				 			Err(s) => return Err(s),
+				 			Err(e) if e == "Invalid expression" => {
+				 				if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
+				 					break;
+				 				}
+				 				else {
+				 					return Err(e)
+				 				}
+				 			},
+				 			Err(e) => return Err(e),
+
 				 		}
 				 		// Eat the semicolons
 				 		match unwrap_some!(self.tokens.peek()).type_ {
@@ -202,7 +222,14 @@ impl Parser {
 				 	if unwrap_some!(self.tokens.peek()).type_ != TokenType::RBrace{
 				 		return Err("expected '}'".to_string());
 				 	}
-				 	self.tokens.next();
+				 	self.tokens.next(); // Eat Rbrace
+
+				 	match self.tokens.peek() {
+				 		Some(t) if t.type_ == TokenType::Semicolon => {self.tokens.next();}, // Eat semicolon, if present
+				 		_ => {},
+				 	}
+
+				 	
 				 	return Ok(Function{name: name, args:args, expressions: expressions, return_type: return_type})
 			},
 			_ => Err("PASS".to_string()),

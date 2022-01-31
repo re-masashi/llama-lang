@@ -1,10 +1,9 @@
-if(true){
-`	1+2
-}else {
-	1+1+1+1--2
+def a(name:i8, age:i32) -> i32{
+	return 42;
+};
+
+def b( ) -> i64{
+	a();
 }
 
 
-
-
-EOF

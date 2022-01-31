@@ -27,7 +27,7 @@ pub enum ExprValue{
     Str(String),
     Identifier(String),
     VarDecl{name:String, type_:String},
-    IfElse{cond:Box<ExprValue>, if_:Box<ExprValue>, else_:Box<ExprValue>},
+    IfElse{cond:Box<ExprValue>, if_:Vec<ExprValue>, else_:Vec<ExprValue>},
     Assign{name:String, value:Box<ExprValue>},
     AugAssign{name:String, op: Box<TokenType>, value:Box<ExprValue>},
     Return(Box<ExprValue>)
