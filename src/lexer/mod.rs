@@ -259,7 +259,7 @@ impl Iterator for Lexer {
         }
         
         else {
-            token = Ok(TokenType::Eof)
+            token = Ok(TokenType::Unknown)
         }
 
         return Some(Ok(Token {

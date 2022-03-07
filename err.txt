@@ -1,0 +1,5 @@
+# A program with err.
+
+a = 1;
+(2
+c;

@@ -15,7 +15,7 @@ macro_rules! unwrap_or_exit {
 
 pub fn main() {    
     let lexer = unwrap_or_exit!(Lexer::from_file("lexing.txt"), "IO");
-    let tokens = lexer
+    let tokens = lexer 
         .map(|t| unwrap_or_exit!(t, "Lexing"))
         .collect::<Vec<_>>();
     let mut parser = Parser::new(tokens.into_iter().peekable());

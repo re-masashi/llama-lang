@@ -14,7 +14,6 @@ type TokenIter = Peekable<IntoIter<Token>>;
 pub enum AstNode{
     Extern(External),
     FunctionDef(Function),
-    Expression(Box<ExprValue>) // Valid in top-level and in functions
 }
 
 #[derive(Debug)]
@@ -22,11 +21,11 @@ pub enum ExprValue{
     FnCall(String, Vec<ExprValue>),
     UnOp(Box<TokenType>, Box<ExprValue>),
     BinOp(Box<ExprValue>,Box<TokenType>,Box<ExprValue>),
-    Boolean(bool),
-    Integer(i32),
+    Boolean(bool), // Done codegen
+    Integer(i32), // Done codegen
     Str(String),
-    Identifier(String),
-    VarDecl{name:String, type_:String},
+    Identifier(String), //Done codegen
+    VarDecl{name:String, type_:String}, // Done codegen
     IfElse{cond:Box<ExprValue>, if_:Vec<ExprValue>, else_:Vec<ExprValue>},
     Assign{name:String, value:Box<ExprValue>},
     AugAssign{name:String, op: Box<TokenType>, value:Box<ExprValue>},

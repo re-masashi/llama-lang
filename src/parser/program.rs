@@ -28,21 +28,27 @@ impl Parser{
 						}
 					}
 
-					_ => {
+					_ => /*{
 						match self.parse_expression(){
 							Ok(result) => {
-								if unwrap_some!(self.tokens.peek()).type_ == TokenType::Semicolon{
-									self.tokens.next(); // eat ';'
-								}
-								else{
-									return Err("Top level expression missing ending semicolon".to_string())
-								}
+								match self.tokens.peek(){
+									Some(t) if t.type_ == TokenType::Semicolon 
+										=> self.tokens.next(), // eat ';'
+									Some(_) => {
+										let pos = unwrap_some!(self.tokens.peek()).pos;
+										let line = unwrap_some!(self.tokens.peek()).line_no;
+										return Err(format!(
+											"Expected semicolon after expression. Before line {}:{}", line, pos).to_string());
+									},
+									None => return Err("EOF".to_string())
+								};
 								ast.insert(ast.len(), AstNode::Expression(Box::new(result)));
 							},
 							Err(e) if e == "EOF".to_string() => return Ok(ast),
 							Err(e) => return Err(e),
 						}
-					}
+					}*/
+					return Err("Only functions or expressions allowed at top-level.")
 				}
 				None => return Ok(ast)				
 			}

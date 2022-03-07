@@ -1,5 +1,6 @@
 pub mod lexer;
 pub mod parser;
+pub mod codegen;
 
 #[macro_export]
 macro_rules! unwrap_some {

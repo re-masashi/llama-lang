@@ -5,7 +5,6 @@ use crate::{unwrap_some,Result};
 impl Parser {
 
 	pub fn parse_expression(&mut self)->Result<ExprValue>{
-		println!("Expression parser is at {:?}", self.tokens.peek());
 		let l_value: Result<ExprValue> = match unwrap_some!(self.tokens.peek()).type_ {
 			TokenType::LParen => {
 				self.tokens.next();
@@ -32,7 +31,11 @@ impl Parser {
 				self.tokens.next(); Ok(ExprValue::Integer(i))
 			},
 
-			_ => return Err("Invalid expression".to_string())
+			TokenType::Str(_) => self.parse_string(),
+
+			_ => {
+				return Err(format!("Invalid expression").to_string())
+			},
 		};
 		// The functions above will eat the value, then we can proceed to check for a bin op.
 		loop {
@@ -111,11 +114,11 @@ impl Parser {
 			self.tokens.next(); // Eat ')'
 		}
 		else {
-			println!("{:?}", unwrap_some!(self.tokens.peek())); 
+			// println!("{:?}", unwrap_some!(self.tokens.peek())); 
 			return Err("Missing closing parenthesis".to_string());
 		}
 
-		if unwrap_some!(self.tokens.next()).type_ == TokenType::LBrace{
+		if unwrap_some!(self.tokens.peek()).type_ == TokenType::LBrace{
 			self.tokens.next(); // Eat '{'
 		}
 		else {
@@ -306,6 +309,13 @@ impl Parser {
 		self.tokens.next(); // Eat `return`
 		let expr = Box::new(self.parse_expression().unwrap());
 		return Ok(ExprValue::Return(expr));
+	}
+
+	pub fn parse_string(&mut self) -> Result<ExprValue>{
+		match unwrap_some!(self.tokens.next()).type_ {
+			TokenType::Str(s) => return Ok(ExprValue::Str(s)),
+			_ => unreachable!()
+		};
 	}
 
 }

@@ -50,8 +50,6 @@ pub enum TokenType {
     MulEq,     // *=
     DivEq,     // /=
 
-    Eof,
-
     Unknown,
 }
 
