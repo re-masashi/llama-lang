@@ -61,7 +61,7 @@ impl Parser {
 		 			_ => return Err("Syntax Error: expected Identifier after keyword 'extern'".to_string()),
 		 		}} // This is ugly, but works... loop just to use break in match
 		 		
-                // Eat and store
+                // Eat and store name
 		 		match unwrap_some!(self.tokens.next()).type_{ 
 		 			TokenType::Identifier(n) => name = n, // Always matches
 		 			_ => unreachable!(), // never happens

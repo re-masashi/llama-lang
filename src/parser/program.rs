@@ -48,7 +48,7 @@ impl Parser{
 							Err(e) => return Err(e),
 						}
 					}*/
-					return Err("Only functions or expressions allowed at top-level.")
+					return Err("Only functions or expressions allowed at top-level.".to_string())
 				}
 				None => return Ok(ast)				
 			}

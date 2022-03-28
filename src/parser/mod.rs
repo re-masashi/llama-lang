@@ -27,7 +27,7 @@ pub enum ExprValue{
     Identifier(String), //Done codegen
     VarDecl{name:String, type_:String}, // Done codegen
     IfElse{cond:Box<ExprValue>, if_:Vec<ExprValue>, else_:Vec<ExprValue>},
-    Assign{name:String, value:Box<ExprValue>},
+    Assign{name:String, value:Box<ExprValue>}, // Done codegen
     AugAssign{name:String, op: Box<TokenType>, value:Box<ExprValue>},
     Return(Box<ExprValue>)
 }
@@ -40,7 +40,7 @@ pub struct External {
     pub return_type: String,
 }
 
-// 'def' name (args) '->' return_type { statements}
+// 'def' name (args) '->' return_type { expressions}
 #[derive(Debug)]
 pub struct Function {
     pub name: String,
