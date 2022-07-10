@@ -20,4 +20,6 @@ pub fn main() {
         .collect::<Vec<_>>();
     let mut parser = Parser::new(tokens.into_iter().peekable());
     println!("{:#?}", parser.parse_program());
+    println!("==========\n\n\n\n\n\n");
+    println!("{:#?}", parser.symtab);
 }

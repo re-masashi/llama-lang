@@ -1,6 +1,6 @@
 use crate::parser::{Parser, ExprValue};
 use crate::lexer::tokens::{TokenType};
-use crate::{unwrap_some,Result};
+use crate::{unwrap_some,Result,Symbol};
 
 impl Parser {
 
@@ -223,6 +223,7 @@ impl Parser {
 			TokenType::Identifier(t) => type_ = t,
 			_ => return Err("Expected an identifier".to_string()),
 		}
+		self.symtab.insert(name.clone(),Symbol::new(type_.clone(), self.current_scope.clone()));
 		return Ok(ExprValue::VarDecl{name:name,type_:type_})
 	}
 

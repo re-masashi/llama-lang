@@ -13,7 +13,6 @@ function :=
 		|(IDENTIFIER COLON IDENTIFIER)?
 	) (
 		|expression SEMICOLON
-		|statement SEMICOLON
 	)* RBRACE
 
 expression :=
@@ -36,7 +35,8 @@ expression :=
 	|IDENTIFIER
 	|TRUE
 	|FALSE
-
-statement :=
-	|LET expression COLON IDENTIFIER ASSIGN expression
+	|LET expression COLON IDENTIFIER
 	|RETURN expression
+
+
+

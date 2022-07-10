@@ -1,4 +1,6 @@
 def a(name:i8, age:i32) -> i32{
+	let x:i32;
+	x = 1;
 	return 42;
 };
 

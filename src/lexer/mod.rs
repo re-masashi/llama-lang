@@ -124,7 +124,7 @@ impl Iterator for Lexer {
                 s if String::from("return") == s => token = Ok(TokenType::Return),
                 s if String::from("true") == s => token = Ok(TokenType::True),
                 s if String::from("false") == s => token = Ok(TokenType::False),
-                s => token = Ok(TokenType::Identifier(s)),
+                s => {token = Ok(TokenType::Identifier(s))},
             };
         }
         // Integer Literal

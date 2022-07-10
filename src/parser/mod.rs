@@ -1,4 +1,5 @@
 use crate::lexer::tokens::{Token,TokenType};
+use crate::SymbolTable;
 use std::iter::Peekable;
 use std::vec::IntoIter;
 use std::collections::HashMap;
@@ -52,12 +53,14 @@ pub struct Function {
 /// A parser that generates an abstract syntax tree.
 pub struct Parser {
     tokens: TokenIter,
+    pub symtab: SymbolTable,
+    current_scope: String,
 }
 
 impl Parser {
 
     pub fn new(tokens: TokenIter) -> Self {
-        Parser { tokens }
+        Parser { tokens, symtab: SymbolTable::new(), current_scope:"global".to_string()}
     }
 
     pub fn get_tok_precedence(&mut self, tok: TokenType) -> i32{

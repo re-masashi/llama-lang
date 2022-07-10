@@ -1,6 +1,6 @@
 use crate::parser::{Parser, External, Function, ExprValue};
 use crate::lexer::tokens::{Token, TokenType};
-use crate::{unwrap_some, Result};
+use crate::{unwrap_some, Result, Symbol};
 use std::collections::HashMap;
 
 impl Parser {
@@ -117,7 +117,10 @@ impl Parser {
 		 		else {
 		 			return Err("Semicolon after extern is mandatory.".to_string())
 		 		}
-
+		 		self.symtab.insert(
+		 			name.clone(), 
+		 			Symbol::new(return_type.clone(),self.current_scope.clone())
+		 		);
 		 		return Ok(External{name:name, args:args, return_type: return_type})
 		 	},
 		 	_ => Err("PASS".to_string()),
@@ -146,11 +149,12 @@ impl Parser {
 				 		}
 				 	} // This is ugly, but works. `loop` just to use break in match
 				 		
-		                // Eat and store
+		            // Eat and store
 				 	match unwrap_some!(self.tokens.next()).type_{ 
 				 		TokenType::Identifier(n) => name = n, // Always matches
 				 			_ => unreachable!(), // never happens
 				 	}
+				 	self.current_scope = name.clone();
 				 		
 		            if unwrap_some!(self.tokens.peek()).type_ != TokenType::LParen {
 				 		return Err("Syntax Error: expected '(' after Identifier".to_string())
@@ -220,6 +224,7 @@ impl Parser {
 				 		}
 				 	}
 				 	if unwrap_some!(self.tokens.peek()).type_ != TokenType::RBrace{
+				 		print!("{:?}", self.tokens.peek());
 				 		return Err("expected '}'".to_string());
 				 	}
 				 	self.tokens.next(); // Eat Rbrace
@@ -228,11 +233,12 @@ impl Parser {
 				 		Some(t) if t.type_ == TokenType::Semicolon => {self.tokens.next();}, // Eat semicolon, if present
 				 		_ => {},
 				 	}
-
-				 	
+				 	println!("{}",self.current_scope.clone());
+				 	self.current_scope = "global".to_string();
+				 	self.symtab.insert(name.clone(), Symbol::new(return_type.clone(), self.current_scope.clone()));
 				 	return Ok(Function{name: name, args:args, expressions: expressions, return_type: return_type})
 			},
-			_ => Err("PASS".to_string()),
+			_ => Err("PASS".to_string()), //never happens
 		}
 	}
 

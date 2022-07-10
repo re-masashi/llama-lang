@@ -48,7 +48,10 @@ impl Parser{
 							Err(e) => return Err(e),
 						}
 					}*/
-					return Err("Only functions or expressions allowed at top-level.".to_string())
+					{
+						println!("{:?}", self.tokens.peek());
+						return Err("Only functions or expressions allowed at top-level.".to_string())
+					}
 				}
 				None => return Ok(ast)				
 			}
