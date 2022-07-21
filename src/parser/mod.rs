@@ -45,7 +45,7 @@ pub struct External {
 #[derive(Debug)]
 pub struct Function {
     pub name: String,
-    pub args: HashMap<String,String>,
+    pub args: [Vec<String>;2],
     pub expressions: Vec<ExprValue>,
     pub return_type: String,
 }

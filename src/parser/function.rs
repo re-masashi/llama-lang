@@ -130,7 +130,7 @@ impl Parser {
 	pub fn parse_function(&mut self) -> Result<Function>{
 		let name: String;
 		let return_type: String;
-		let mut args = HashMap::new(); // Map<NAME, TYPE> of type <String, String>
+		let mut args:[Vec<String>;2] = [Vec::new(),Vec::new()]; // <NAME, TYPE> of type <String, String>
 		let mut expressions: Vec<ExprValue> = Vec::new(); 
 		match self.tokens.peek() {
 
@@ -154,7 +154,7 @@ impl Parser {
 				 		TokenType::Identifier(n) => name = n, // Always matches
 				 			_ => unreachable!(), // never happens
 				 	}
-				 	self.current_scope = name.clone();
+				 	self.current_scope = format!("{}.{}",self.current_scope,name.clone());
 				 		
 		            if unwrap_some!(self.tokens.peek()).type_ != TokenType::LParen {
 				 		return Err("Syntax Error: expected '(' after Identifier".to_string())
@@ -178,7 +178,10 @@ impl Parser {
 				 			}
 				 			let type_annot = self.parse_type_annot();
 				 			match type_annot {
-				 				Ok((n, t)) => args.insert(n, t),
+				 				Ok((n, t)) => {
+				 					args[0].push(n);
+				 					args[1].push(t); 
+				 				},
 				 				Err(e) => {
 				 					return Err(e);
 				 				},

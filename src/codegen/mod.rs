@@ -1,16 +1,20 @@
-/*
+pub mod compiler;
+
+
 use std::collections::HashMap;
 use inkwell::{
 	context::Context,
 	builder::Builder,
 	module::Module,
-	values::{FunctionValue,PointerValue, AnyValueEnum},
-    types::AnyTypeEnum::IntType,
+	values::{FunctionValue,PointerValue, AnyValueEnum, IntValue},
+    types::{BasicMetadataTypeEnum,IntType}
 };
 use crate::{
     Result,
+    unwrap_some,
     parser::{ExprValue, Function}
 };
+
 
 pub struct Compiler<'a, 'ctx> {
     pub context: &'ctx Context,
@@ -48,7 +52,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                 let var_type = self.builder.build_load(*var, name.as_str());
                                 let var_value = match type_.as_str() {
                                    "i32" => AnyValueEnum::IntValue(
-                                            var_type.into_float_value()
+                                            var_type.into_int_value()
                                         ),
                                    _ => unimplemented!(),
                                 };
@@ -65,7 +69,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 match self.variables.get(name) {
                     Some(_) => Err("Variable already declared.".to_string()),
                     None => {
-                        let value = self.builder.build_alloca(name.clone().as_str());
+                        let value = self.builder.build_alloca(self.context.i32_type(),name.clone().as_str());
                         self.variables.insert(name.clone(),(type_.clone(), value));
                         return self.compile_expr(&ExprValue::Integer(0));
                     }
@@ -76,18 +80,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             
             ExprValue::Assign{ref name, ref value} => {
                 match self.variables.get(name) {
-                    Some(type_, var) => {
-                        let var_value = match type_.clone().as_str() {
-                            "i32" => AnyValueEnum::IntValue(
-                                var_type.into_float_value()
-                            ),
-                            _ => unimplemented!(),
-                        }; 
-                        let value = self.builder.build_store(*type_, var_value);
+                    Some((type_, var)) => {
+                        let value_ = self.ret_int(&*value);
+                        self.builder.build_store(
+                            *var, self.context.i32_type().const_int(
+                                match &value_.get_zero_extended_constant(){Some(i)=>*i,None=>unreachable!()},
+                                false
+                            )
+                        );
+                        Ok(AnyValueEnum::IntValue(value_))
                     },
                     None => Err("No such variable.".to_string()),
                 }
             },
+            _ => unimplemented!(),
         }
     }
 
@@ -97,24 +103,33 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     let fn_type = 
                     match return_type.as_str(){
                         "None" => self.context.void_type().fn_type(
-                            &[BasicTypeEnum::IntType(IntType);args.len()], false
+                            &[BasicMetadataTypeEnum::IntType(self.context.i32_type())], false
                         ),
                         "i32" => self.context.void_type().fn_type(
-                            &[BasicTypeEnum::IntType(IntType);args.len()], false
+                            &[BasicMetadataTypeEnum::IntType(self.context.i32_type())], false
                         ),
                         _ => unimplemented!(),
                     };
                     let fn_val = self.module.add_function(name.clone().as_str(), fn_type, None);
                     let entry_point = self.context.append_basic_block(fn_val, "entry");
                     self.builder.position_at_end(entry_point);
-                    
+                    for (i,arg) in fn_val.get_param_iter().enumerate(){
+                        let arg_name = args[0][i].as_str();
+                        let alloca = self.builder.build_alloca(self.context.i32_type(), arg_name);
+                    }
                     for expr in expressions {
                         self.compile_expr(expr);
                     }
+
                 }
                 
 
         }
     }
+    fn ret_int(&mut self, value:&Box<ExprValue>)->IntValue<'ctx>{
+        match self.compile_expr(&*value){
+            Ok(AnyValueEnum::IntValue(i)) =>i,
+            _ => unreachable!(),
+        }
+    }
 }
-*/
