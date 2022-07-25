@@ -1,12 +1,9 @@
-pub mod compiler;
-
-
 use std::collections::HashMap;
 use inkwell::{
-	context::Context,
-	builder::Builder,
-	module::Module,
-	values::{FunctionValue,PointerValue, AnyValueEnum, IntValue},
+    context::Context,
+    builder::Builder,
+    module::Module,
+    values::{FunctionValue,PointerValue, AnyValueEnum, IntValue},
     types::{BasicMetadataTypeEnum,IntType}
 };
 use crate::{
@@ -24,20 +21,24 @@ pub struct Compiler<'a, 'ctx> {
     // pub function: &'a Function,
 
     variables: HashMap<String, (String /* Type */, PointerValue<'ctx>)>, 
-    fn_value_opt: Option<FunctionValue<'ctx>>
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
+
+    fn new(context: &'ctx Context) ->Self{
+        let context = context;
+        let builder: Builder<'a>= context.create_builder();
+        let module: Module<'a> = context.create_module("main_mod");
+        let variables:HashMap<String,(String,  PointerValue<'ctx>)> = HashMap::new();
+        let compiler:Compiler<'a,'ctx> = Compiler {
+            context: &context, builder: &builder, module: &module, variables
+        };
+        compiler
+    }
     /// Gets a defined function given its name.
     #[inline]
     fn get_function(&self, name: &str) -> Option<FunctionValue<'ctx>> {
         self.module.get_function(name)
-    }
-
-    /// Returns the `FunctionValue` representing the function being compiled.
-    #[inline]
-    fn fn_value(&self) -> FunctionValue<'ctx> {
-        self.fn_value_opt.unwrap()
     }
 
     fn compile_expr(&mut self, expr: &ExprValue) -> Result<AnyValueEnum<'ctx>> {
@@ -79,9 +80,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ExprValue::Boolean(n) => Ok(AnyValueEnum::IntValue(self.context.bool_type().const_int(n as u64, false))),
             
             ExprValue::Assign{ref name, ref value} => {
-                match self.variables.get(name) {
-                    Some((type_, var)) => {
                         let value_ = self.ret_int(&*value);
+                        match self.variables.get(name) {
+                    Some((type_, var)) => {
+
                         self.builder.build_store(
                             *var, self.context.i32_type().const_int(
                                 match &value_.get_zero_extended_constant(){Some(i)=>*i,None=>unreachable!()},
@@ -122,8 +124,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     }
 
                 }
-                
-
         }
     }
     fn ret_int(&mut self, value:&Box<ExprValue>)->IntValue<'ctx>{
