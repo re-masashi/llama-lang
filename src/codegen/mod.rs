@@ -25,13 +25,10 @@ pub struct Compiler<'a, 'ctx> {
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
-    fn new(context: &'ctx Context) ->Self{
-        let context = context;
-        let builder: Builder<'a>= context.create_builder();
-        let module: Module<'a> = context.create_module("main_mod");
+    pub fn new(context: &'ctx Context, builder: &'a Builder<'ctx>, module: &'a Module<'ctx> ) ->Self{
         let variables:HashMap<String,(String,  PointerValue<'ctx>)> = HashMap::new();
         let compiler:Compiler<'a,'ctx> = Compiler {
-            context: &context, builder: &builder, module: &module, variables
+            context, builder, module, variables
         };
         compiler
     }
@@ -99,7 +96,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 
-    fn compile_fn(&mut self, fn_: &Function){
+    pub fn compile_fn(&mut self, fn_: &Function){
         match fn_ {
                Function{name, args, expressions, return_type} => {
                     let fn_type = 

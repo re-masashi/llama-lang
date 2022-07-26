@@ -4,7 +4,10 @@ def a(name:i8, age:i32) -> i32{
 	return 42;
 };
 
-def b( ) -> i64{
-	return a();
+def printi32()->i32{};
+
+def main( ) -> i64{
+	printi32(a());
+	return 0;
 }
 
