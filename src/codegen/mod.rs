@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use inkwell::{
     context::Context,
     builder::Builder,
-    module::Module,
+    module::{Module,Linkage},
     values::{FunctionValue,PointerValue, AnyValueEnum, IntValue},
     types::{BasicMetadataTypeEnum,IntType}
 };
@@ -109,7 +109,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         ),
                         _ => unimplemented!(),
                     };
-                    let fn_val = self.module.add_function(name.clone().as_str(), fn_type, None);
+                    let fn_val = self.module.add_function(name.clone().as_str(), fn_type, Some(Linkage::External));
                     let entry_point = self.context.append_basic_block(fn_val, "entry");
                     self.builder.position_at_end(entry_point);
                     for (i,arg) in fn_val.get_param_iter().enumerate(){
@@ -123,6 +123,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
         }
     }
+    
     fn ret_int(&mut self, value:&Box<ExprValue>)->IntValue<'ctx>{
         match self.compile_expr(&*value){
             Ok(AnyValueEnum::IntValue(i)) =>i,
