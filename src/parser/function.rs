@@ -241,7 +241,7 @@ impl Parser {
 				 				self.tokens.next();
 				 				continue;
 				 			}, 
-				 			_ => {break}
+				 			_ => break,
 				 		}
 				 	}
 				 	if unwrap_some!(self.tokens.peek()).type_ != TokenType::RBrace{

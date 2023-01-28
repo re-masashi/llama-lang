@@ -3,5 +3,10 @@ extern println(a: i32) -> i32;
 
 def main( ) -> i32{
 	println(next_int());
-	return 0;
+	if(true){
+		println(21);
+	}else{
+		println(14);
+	};
+	return 0
 };

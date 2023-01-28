@@ -147,8 +147,11 @@ impl Parser {
 		loop {
 			match self.parse_expression() {
 				Ok(expr) => expressions_if.insert(expressions_if.len(),expr),
-				Err(e) if e == "Invalid expression" => {
-					if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
+				Err(e) if e == format!("Invalid expression {:#?}:{:#?}", self.line_no, self.pos) => {
+					if (
+						unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace ||
+						unwrap_some!(self.tokens.peek()).type_ == TokenType::Semicolon
+					){
 						break;
 					}
 					else {
@@ -156,7 +159,6 @@ impl Parser {
 					}
 				},
 				Err(e) => return Err(e),
-
 			}
 			// Eat the semicolons
 			match unwrap_some!(self.tokens.peek()).type_ {
@@ -165,17 +167,15 @@ impl Parser {
 					self.tokens.next(); 
 					continue;
 				}, 
-				_ => return Err("Expected Semicolon".to_string())
+				TokenType::RBrace => break,
+				_ => return Err("Expected semicolon or '}'".to_string())
 			}
 		}
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
 			self.advance();
 			self.tokens.next(); // Eat '}'
-		}
-		else {
-			return Err("Missing closing '}' at if".to_string());
-		}
+		} // No other case
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::Else{
 			self.advance();
@@ -196,8 +196,11 @@ impl Parser {
 		loop {
 			match self.parse_expression() {
 				Ok(expr) => expressions_else.insert(expressions_else.len(),expr),
-				Err(e) if e == "Invalid expression" => {
-					if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
+				Err(e) if e == format!("Invalid expression {:#?}:{:#?}", self.line_no, self.pos) => {
+					if (
+						unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace ||
+						unwrap_some!(self.tokens.peek()).type_ == TokenType::Semicolon
+					){
 						break;
 					}
 					else {
@@ -205,7 +208,6 @@ impl Parser {
 					}
 				},
 				Err(e) => return Err(e),
-
 			}
 			// Eat the semicolons
 			match unwrap_some!(self.tokens.peek()).type_ {
@@ -214,7 +216,8 @@ impl Parser {
 					self.tokens.next(); 
 					continue;
 				}, 
-				_ => {break}
+				TokenType::RBrace => break,
+				_ => return Err("Expected semicolon or '}'".to_string())
 			}
 		}
 
@@ -318,13 +321,13 @@ impl Parser {
 			self.advance();
 			self.tokens.next(); // Eat '('
 			let mut values = Vec::new();
-			let arg1; 
+			let arg1;
 			match self.parse_expression(){
 				Ok(expr) => arg1 = expr,
 				Err(_) => {
 					if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
 						self.advance();
-						self.tokens.next();
+						self.tokens.next(); // Eat ')'
 						return Ok(ExprValue::FnCall(name, values));
 					}
 					return Err("Invalid Function call".to_string())
@@ -336,7 +339,7 @@ impl Parser {
 					self.advance();
 					self.tokens.next(); // Eat ','
 					values.insert(values.len(),self.parse_expression().unwrap());
-				} 
+				}
 				else if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
 					self.advance();
 					self.tokens.next(); // Eat ')'
@@ -355,15 +358,7 @@ impl Parser {
 		self.advance();
 		self.tokens.next(); // Eat `return`
 		let expr = self.parse_expression().unwrap();
-		match unwrap_some!(self.tokens.peek()).type_ {
-			TokenType::Semicolon => {
-				self.advance();
-				self.tokens.next(); // Eat `;`
-				Ok(ExprValue::Return(Box::new(expr)))
-			},
-			_ => Err(format!("Expected Semicolon {:#?}:{:#?}", self.line_no, self.pos).to_string()),
-		}
-		
+		Ok(ExprValue::Return(Box::new(expr)))		
 	}
 
 	pub fn parse_string(&mut self) -> Result<ExprValue>{

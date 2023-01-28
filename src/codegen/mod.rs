@@ -33,9 +33,6 @@ pub struct Generator {
     module: LLVMModuleRef,
     /// LLVM Builder.
     builder: LLVMBuilderRef,
-    /// Current function
-    current_fn: LLVMValueRef,
-
     /// LLVM variable map.
     local_vars: RefCell<HashMap<String, LLVMValueRef>>,
     /// Variables in the current scope
@@ -58,7 +55,6 @@ impl Generator {
             module: core::LLVMModuleCreateWithNameInContext(c_str!(name), context),
             builder: core::LLVMCreateBuilderInContext(context),
             local_vars: RefCell::new(HashMap::new()),
-            current_fn: ptr::null_mut(),
             scope_var_names: RefCell::new(Vec::new()),
         }
     }
