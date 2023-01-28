@@ -1,133 +1,235 @@
+mod expression;
+mod function;
+mod program;
+mod extern_;
+
+
+use crate::c_str;
+use crate::Result;
+use crate::parser::{AstNode};
+
+use libc::c_char;
+use llvm_sys::analysis::LLVMVerifierFailureAction;
+use llvm_sys::prelude::{LLVMBuilderRef, LLVMContextRef, LLVMModuleRef, LLVMTypeRef, LLVMValueRef};
+use llvm_sys::target_machine::{
+    LLVMCodeGenFileType, LLVMCodeGenOptLevel, LLVMCodeModel, LLVMRelocMode, LLVMTarget,
+};
+use llvm_sys::{analysis, core, target, target_machine};
+use log::{debug, error, info, trace, warn};
+use std::cell::RefCell;
 use std::collections::HashMap;
-use inkwell::{
-    context::Context,
-    builder::Builder,
-    module::{Module,Linkage},
-    values::{FunctionValue,PointerValue, AnyValueEnum, IntValue},
-    types::{BasicMetadataTypeEnum,IntType}
-};
-use crate::{
-    Result,
-    unwrap_some,
-    parser::{ExprValue, Function}
-};
+use std::ffi::CStr;
+use std::process::Command;
+use std::ptr;
 
+/// Generates LLVM IR based on the AST.
+pub struct Generator {
+    /// The root of the AST.
+    program: Vec<AstNode>,
 
-pub struct Compiler<'a, 'ctx> {
-    pub context: &'ctx Context,
-    pub builder: &'a Builder<'ctx>,
-    // pub fpm: &'a PassManager<FunctionValue<'ctx>>,
-    pub module: &'a Module<'ctx>,
-    // pub function: &'a Function,
+    /// LLVM Context.
+    context: LLVMContextRef,
+    /// LLVM Module.
+    module: LLVMModuleRef,
+    /// LLVM Builder.
+    builder: LLVMBuilderRef,
+    /// Current function
+    current_fn: LLVMValueRef,
 
-    variables: HashMap<String, (String /* Type */, PointerValue<'ctx>)>, 
+    /// LLVM variable map.
+    local_vars: RefCell<HashMap<String, LLVMValueRef>>,
+    /// Variables in the current scope
+    scope_var_names: RefCell<Vec<Vec<String>>>,
 }
 
-impl<'a, 'ctx> Compiler<'a, 'ctx> {
+impl Generator {
+    /// Create a new generator from a [`Program`].
+    ///
+    /// [`Program`]: ../parser/program/struct.Program.html
+    ///
+    /// # Arguments
+    /// * `program` - The root of the AST.
+    /// * `name` - The name of the module to be created.
+    pub unsafe fn new(program: Vec<AstNode>, name: &str) -> Self {
+        let context = core::LLVMContextCreate();
+        Generator {
+            program,
+            context,
+            module: core::LLVMModuleCreateWithNameInContext(c_str!(name), context),
+            builder: core::LLVMCreateBuilderInContext(context),
+            local_vars: RefCell::new(HashMap::new()),
+            current_fn: ptr::null_mut(),
+            scope_var_names: RefCell::new(Vec::new()),
+        }
+    }
 
-    pub fn new(context: &'ctx Context, builder: &'a Builder<'ctx>, module: &'a Module<'ctx> ) ->Self{
-        let variables:HashMap<String,(String,  PointerValue<'ctx>)> = HashMap::new();
-        let compiler:Compiler<'a,'ctx> = Compiler {
-            context, builder, module, variables
+    /// Generate the LLVM IR from the module.
+    pub unsafe fn generate(&mut self) -> Result<()> {
+        trace!("Generating program");
+        let current_fn = ptr::null_mut();
+        for function in self.program.iter(){
+            self.local_vars.borrow_mut().clear();
+            match function {
+                AstNode::FunctionDef(function) => self.gen_function(function, current_fn),
+                AstNode::Extern(function) => self.gen_extern(function),
+            };
+        }
+        Ok(())
+    }
+
+    /// Verify LLVM IR.
+    pub unsafe fn verify(&self) -> Result<()> {
+        let mut error = ptr::null_mut::<c_char>();
+        analysis::LLVMVerifyModule(
+            self.module,
+            LLVMVerifierFailureAction::LLVMReturnStatusAction,
+            &mut error,
+        );
+        if !error.is_null() {
+            let error = CStr::from_ptr(error).to_str().unwrap().to_string();
+            if !error.is_empty() {
+                return Err(error);
+            }
+        }
+        debug!("Successfully verified module");
+        Ok(())
+    }
+
+    /// Dump LLVM IR to stdout.
+    pub unsafe fn generate_ir(&self, output: &str) -> Result<()> {
+        let mut error = ptr::null_mut::<c_char>();
+        core::LLVMPrintModuleToFile(self.module, c_str!(output), &mut error);
+        if !error.is_null() {
+            let error = CStr::from_ptr(error).to_str().unwrap().to_string();
+            if !error.is_empty() {
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    /// Generate an object file from the LLVM IR.
+    ///
+    /// # Arguments
+    /// * `optimization` - Optimization level (0-3).
+    /// * `output` - Output file path.
+    pub unsafe fn generate_object_file(&self, optimization: u32, output: &str) -> Result<()> {
+        let target_triple = target_machine::LLVMGetDefaultTargetTriple();
+
+        info!(
+            "Target: {}",
+            CStr::from_ptr(target_triple).to_str().unwrap()
+        );
+
+        target::LLVM_InitializeAllTargetInfos();
+        target::LLVM_InitializeAllTargets();
+        target::LLVM_InitializeAllTargetMCs();
+        target::LLVM_InitializeAllAsmParsers();
+        target::LLVM_InitializeAllAsmPrinters();
+        trace!("Successfully initialized all LLVM targets");
+
+        let mut target = ptr::null_mut::<LLVMTarget>();
+        let mut error = ptr::null_mut::<c_char>();
+        target_machine::LLVMGetTargetFromTriple(target_triple, &mut target, &mut error);
+        if !error.is_null() {
+            let error = CStr::from_ptr(error).to_str().unwrap().to_string();
+            if !error.is_empty() {
+                return Err(error);
+            }
+        }
+
+        let optimization_level = match optimization {
+            0 => LLVMCodeGenOptLevel::LLVMCodeGenLevelNone,
+            1 => LLVMCodeGenOptLevel::LLVMCodeGenLevelLess,
+            2 => LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
+            3 => LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
+            _ => {
+                warn!("Invalid optimization level, defaulting to 2");
+                LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault
+            }
         };
-        compiler
+        info!("Optimization level: {}", optimization);
+
+        let target_machine = target_machine::LLVMCreateTargetMachine(
+            target,
+            target_triple,
+            c_str!("generic"),
+            c_str!(""),
+            optimization_level,
+            LLVMRelocMode::LLVMRelocDefault, // TODO is this right?
+            LLVMCodeModel::LLVMCodeModelDefault, // TODO is this right?
+        );
+        trace!("Successfully created target machine");
+
+        let mut target = ptr::null_mut::<c_char>();
+        target_machine::LLVMTargetMachineEmitToFile(
+            target_machine,
+            self.module,
+            c_str!(output) as *mut _,
+            LLVMCodeGenFileType::LLVMObjectFile,
+            &mut target,
+        );
+        if !target.is_null() {
+            let error = CStr::from_ptr(error).to_str().unwrap();
+            error!("{}", error);
+        };
+        trace!("Successfully emitted to file");
+        Ok(())
     }
-    /// Gets a defined function given its name.
+
+    /// Generates an executable from the object file by calling gcc.
+    ///
+    /// # Arguments
+    /// * `object_file` - Path to the object file.
+    /// * `output` - Path to the executable.
+    pub fn generate_executable(&self, object_file: &str, output: &str) -> Result<()> {
+        // TODO is there a better way to do this?
+        match Command::new("gcc")
+            .args(&[object_file, "-o", output])
+            .spawn()
+        {
+            Ok(_) => {
+                debug!("Successfully generated executable: {}", output);
+                Ok(())
+            }
+            Err(e) => Err(format!("Unable to link object file:\n{}", e)),
+        }
+    }
+
+    /// Get LLVM i64 type in context.
     #[inline]
-    fn get_function(&self, name: &str) -> Option<FunctionValue<'ctx>> {
-        self.module.get_function(name)
+    fn i64_type(&self) -> LLVMTypeRef {
+        unsafe { core::LLVMInt64TypeInContext(self.context) }
     }
 
-    fn compile_expr(&mut self, expr: &ExprValue) -> Result<AnyValueEnum<'ctx>> {
-        match *expr {
-            ExprValue::Integer(n) => Ok(AnyValueEnum::IntValue(self.context.i32_type().const_int(n as u64, false))),
+    /// Get LLVM i32 type in context.
+    #[inline]
+    fn i32_type(&self) -> LLVMTypeRef {
+        unsafe { core::LLVMInt32TypeInContext(self.context) }
+    }
 
-            ExprValue::Identifier(ref name) => {
-                match self.variables.get(name) {
-                    Some(tuple_) => {
-                        match tuple_ {
-                            (type_,var) => {
-                                let var_type = self.builder.build_load(*var, name.as_str());
-                                let var_value = match type_.as_str() {
-                                   "i32" => AnyValueEnum::IntValue(
-                                            var_type.into_int_value()
-                                        ),
-                                   _ => unimplemented!(),
-                                };
-                                Ok(var_value)
-                            },
-                            _ => unreachable!(),
-                        }
-                    },
-                    None => Err("Could not find a matching variable.".to_string())
-                }
-            },
+    /// Get LLVM i64 type in context.
+    #[inline]
+    fn bool_type(&self) -> LLVMTypeRef {
+        unsafe { core::LLVMInt1TypeInContext(self.context) }
+    }
+}
 
-            ExprValue::VarDecl{ref name, ref type_} => {
-                match self.variables.get(name) {
-                    Some(_) => Err("Variable already declared.".to_string()),
-                    None => {
-                        let value = self.builder.build_alloca(self.context.i32_type(),name.clone().as_str());
-                        self.variables.insert(name.clone(),(type_.clone(), value));
-                        return self.compile_expr(&ExprValue::Integer(0));
-                    }
-                }
-            },
-
-            ExprValue::Boolean(n) => Ok(AnyValueEnum::IntValue(self.context.bool_type().const_int(n as u64, false))),
-            
-            ExprValue::Assign{ref name, ref value} => {
-                        let value_ = self.ret_int(&*value);
-                        match self.variables.get(name) {
-                    Some((type_, var)) => {
-
-                        self.builder.build_store(
-                            *var, self.context.i32_type().const_int(
-                                match &value_.get_zero_extended_constant(){Some(i)=>*i,None=>unreachable!()},
-                                false
-                            )
-                        );
-                        Ok(AnyValueEnum::IntValue(value_))
-                    },
-                    None => Err("No such variable.".to_string()),
-                }
-            },
-            _ => unimplemented!(),
+impl Drop for Generator {
+    fn drop(&mut self) {
+        debug!("Cleaning up generator");
+        unsafe {
+            core::LLVMDisposeBuilder(self.builder);
+            core::LLVMDisposeModule(self.module);
+            core::LLVMContextDispose(self.context);
         }
     }
+}
 
-    pub fn compile_fn(&mut self, fn_: &Function){
-        match fn_ {
-               Function{name, args, expressions, return_type} => {
-                    let fn_type = 
-                    match return_type.as_str(){
-                        "None" => self.context.void_type().fn_type(
-                            &[BasicMetadataTypeEnum::IntType(self.context.i32_type())], false
-                        ),
-                        "i32" => self.context.void_type().fn_type(
-                            &[BasicMetadataTypeEnum::IntType(self.context.i32_type())], false
-                        ),
-                        _ => unimplemented!(),
-                    };
-                    let fn_val = self.module.add_function(name.clone().as_str(), fn_type, Some(Linkage::External));
-                    let entry_point = self.context.append_basic_block(fn_val, "entry");
-                    self.builder.position_at_end(entry_point);
-                    for (i,arg) in fn_val.get_param_iter().enumerate(){
-                        let arg_name = args[0][i].as_str();
-                        let alloca = self.builder.build_alloca(self.context.i32_type(), arg_name);
-                    }
-                    for expr in expressions {
-                        self.compile_expr(expr);
-                    }
-
-                }
-        }
-    }
-    
-    fn ret_int(&mut self, value:&Box<ExprValue>)->IntValue<'ctx>{
-        match self.compile_expr(&*value){
-            Ok(AnyValueEnum::IntValue(i)) =>i,
-            _ => unreachable!(),
-        }
-    }
+/// Convert a `&str` into `*const libc::c_char`
+#[macro_export]
+macro_rules! c_str {
+    ($s:expr) => {
+        format!("{}\0", $s).as_ptr() as *const libc::c_char
+    };
 }

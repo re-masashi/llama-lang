@@ -44,6 +44,7 @@ pub enum TokenType {
     Equal,     // ==
     Not,       // !
     NotEq,     // !=
+    
     /// AugAssign operators
     PlusEq, // +=
     MinusEq,   // -=

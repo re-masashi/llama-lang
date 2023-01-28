@@ -12,4 +12,10 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm13-0"] }
+llvm-sys = "90"
+libc = "0.2.70"
+
+clap = "2.33.0"
+
+log = "0.4.8"
+env_logger = "0.7.1"

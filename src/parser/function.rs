@@ -1,4 +1,4 @@
-use crate::parser::{Parser, External, Function, ExprValue};
+use crate::parser::{Parser, External, Function, ExprValue, Args};
 use crate::lexer::tokens::{Token, TokenType};
 use crate::{unwrap_some, Result, Symbol};
 use std::collections::HashMap;
@@ -17,7 +17,11 @@ impl Parser {
 			}
 		}
 		// Store identifier.
-		let name = match unwrap_some!(self.tokens.next()).type_{ TokenType::Identifier(s)=>s, _=>unreachable!()};
+		self.advance();
+		let name = match unwrap_some!(self.tokens.next()).type_{ 
+			TokenType::Identifier(s)=>s, 
+			_  => unreachable!()
+		};
 		// Check if colon exists.
 		loop{match unwrap_some!(self.tokens.peek()) { Token{
 				type_:TokenType::Colon,
@@ -26,6 +30,7 @@ impl Parser {
 			} => {break;} //ugly but works..
 			_=> return Err("expected ':' .".to_string()),
 		}}
+		self.advance();
 		self.tokens.next(); // Eat ':'
 		// Check if type exists
 		loop{
@@ -37,6 +42,7 @@ impl Parser {
 				_ => return Err("expected Identifier.".to_string()),
 			}
 		}
+		self.advance();
 		// Store type
 		let type_ = match unwrap_some!(self.tokens.next()).type_{ TokenType::Identifier(s)=>s, _=>unreachable!()};
 		return Ok((name, type_))
@@ -45,11 +51,11 @@ impl Parser {
 	pub fn parse_extern(&mut self) -> Result<External>{
 		let name: String;
 		let return_type: String;
-		let mut args = HashMap::new(); // Map<NAME, TYPE>
+		let mut args = Args{name:vec![], type_:vec![]};
 		match self.tokens.peek() {
 
 		 	Some(Token{type_, pos:_, line_no:_ }) if type_ == &TokenType::Extern => {
-
+		 		self.advance();
 		 		self.tokens.next(); // Eat extern
 
 		 		loop{match unwrap_some!(self.tokens.peek()){
@@ -60,7 +66,7 @@ impl Parser {
 					} => {break;}
 		 			_ => return Err("Syntax Error: expected Identifier after keyword 'extern'".to_string()),
 		 		}} // This is ugly, but works... loop just to use break in match
-		 		
+		 		self.advance();
                 // Eat and store name
 		 		match unwrap_some!(self.tokens.next()).type_{ 
 		 			TokenType::Identifier(n) => name = n, // Always matches
@@ -70,7 +76,7 @@ impl Parser {
                 if unwrap_some!(self.tokens.peek()).type_ != TokenType::LParen {
 		 			return Err("Syntax Error: expected '(' after Identifier".to_string())
 		 		}
-		 		
+		 		self.advance();
                 self.tokens.next(); // Eat '('
 		 		
                 if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
@@ -80,16 +86,21 @@ impl Parser {
 		 		else {
 		 			loop {
 		 				if unwrap_some!(self.tokens.peek()).type_ == TokenType::Comma {
+		 					self.advance();
 		 					self.tokens.next(); // Eat ','
 		 					continue;
 		 				}
 		 				if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
+		 					self.advance();
 		 					self.tokens.next(); // Eat ')'
 		 					break;
 		 				}
 		 				let type_annot = self.parse_type_annot();
 		 				match type_annot {
-		 					Ok((n, t)) => args.insert(n, t),
+		 					Ok((n, t)) => {
+		 						args.name.insert(args.name.len(), n);
+		 						args.type_.insert(args.type_.len(), t);
+		 					},
 		 					Err(e) => {
 		 						return Err(e);
 		 					},
@@ -100,7 +111,7 @@ impl Parser {
                 if unwrap_some!(self.tokens.peek()).type_ != TokenType::Arrow{
 		 			return Err("expected '->'".to_string())
 		 		}
-
+		 		self.advance();
 		 		self.tokens.next(); // Eat '->'
 
 		 		match &unwrap_some!(self.tokens.peek()).type_{ 
@@ -109,9 +120,11 @@ impl Parser {
 		 			}, 
 		 			_ => return Err("expected return type after extern".to_string()),
 		 		}
+		 		self.advance();
 		 		self.tokens.next(); // Eat the identifier
 
 		 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::Semicolon{
+		 			self.advance();
 		 			self.tokens.next(); //Eat semicolon
 		 		}
 		 		else {
@@ -130,12 +143,12 @@ impl Parser {
 	pub fn parse_function(&mut self) -> Result<Function>{
 		let name: String;
 		let return_type: String;
-		let mut args:[Vec<String>;2] = [Vec::new(),Vec::new()]; // <NAME, TYPE> of type <String, String>
+		let mut args = Args{name:vec![], type_:vec![]};
 		let mut expressions: Vec<ExprValue> = Vec::new(); 
 		match self.tokens.peek() {
 
 			Some(Token{type_, pos:_, line_no:_ }) if type_ == &TokenType::Def => {
-
+					self.advance();
 			 		self.tokens.next(); // Eat Def
 
 			 		loop{
@@ -148,7 +161,7 @@ impl Parser {
 				 			_ => return Err("Syntax Error: expected Identifier after keyword 'extern'".to_string()),
 				 		}
 				 	} // This is ugly, but works. `loop` just to use break in match
-				 		
+				 	self.advance();
 		            // Eat and store
 				 	match unwrap_some!(self.tokens.next()).type_{ 
 				 		TokenType::Identifier(n) => name = n, // Always matches
@@ -179,8 +192,8 @@ impl Parser {
 				 			let type_annot = self.parse_type_annot();
 				 			match type_annot {
 				 				Ok((n, t)) => {
-				 					args[0].push(n);
-				 					args[1].push(t); 
+				 					args.name.push(n);
+				 					args.type_.push(t); 
 				 				},
 				 				Err(e) => {
 				 					return Err(e);
@@ -192,19 +205,20 @@ impl Parser {
 		            if unwrap_some!(self.tokens.peek()).type_ != TokenType::Arrow{
 				 		return Err("expected '->'".to_string())
 				 	}
-
+				 	self.advance();
 				 	self.tokens.next(); // Eat '->'
 
 				 	match &unwrap_some!(self.tokens.peek()).type_{ 
 				 		TokenType::Identifier(n) => {return_type = n.to_string()}, 
 				 		_ => return Err("expected return type_".to_string()),
 				 	}
+				 	self.advance();
 				 	self.tokens.next(); // Eat the return_type
 
 		            if unwrap_some!(self.tokens.peek()).type_ != TokenType::LBrace{
 				 		return Err("expected '{' in fn def".to_string());
 				 	}
-
+				 	self.advance();
 				 	self.tokens.next(); // Eat '{'
 				 	loop {
 				 		match self.parse_expression() {
@@ -222,7 +236,11 @@ impl Parser {
 				 		}
 				 		// Eat the semicolons
 				 		match unwrap_some!(self.tokens.peek()).type_ {
-				 			TokenType::Semicolon => {self.tokens.next(); continue;}, 
+				 			TokenType::Semicolon => {
+				 				self.advance();
+				 				self.tokens.next();
+				 				continue;
+				 			}, 
 				 			_ => {break}
 				 		}
 				 	}
@@ -230,10 +248,14 @@ impl Parser {
 				 		print!("{:?}", self.tokens.peek());
 				 		return Err("expected '}'".to_string());
 				 	}
+				 	self.advance();
 				 	self.tokens.next(); // Eat Rbrace
 
 				 	match self.tokens.peek() {
-				 		Some(t) if t.type_ == TokenType::Semicolon => {self.tokens.next();}, // Eat semicolon, if present
+				 		Some(t) if t.type_ == TokenType::Semicolon => {
+				 			self.advance();
+				 			self.tokens.next(); // Eat semicolon, if present
+				 		}, 
 				 		_ => {},
 				 	}
 				 	println!("{}",self.current_scope.clone());

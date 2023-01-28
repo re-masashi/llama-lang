@@ -8,6 +8,7 @@ impl Parser {
 		let l_value: Result<ExprValue> = match unwrap_some!(self.tokens.peek()).type_ {
 			TokenType::LParen => {
 				self.tokens.next();
+				self.advance();
 				self.parse_paren_expression()
 			},
 			// Unary
@@ -28,13 +29,19 @@ impl Parser {
 			TokenType::Return => self.parse_return(),
 
 			TokenType::Integer(i) => {
-				self.tokens.next(); Ok(ExprValue::Integer(i))
+				self.tokens.next();
+				self.advance();
+				Ok(ExprValue::Integer(i))
 			},
 
 			TokenType::Str(_) => self.parse_string(),
 
 			_ => {
-				return Err(format!("Invalid expression").to_string())
+				return Err(
+					format!("Invalid expression {:#?}:{:#?}",
+						self.line_no, 
+						self.pos).to_string()
+				)
 			},
 		};
 		// The functions above will eat the value, then we can proceed to check for a bin op.
@@ -49,7 +56,10 @@ impl Parser {
 				|TokenType::Greater 
 				|TokenType::GreaterEq 
 				|TokenType::Equal 
-				|TokenType::NotEq => unwrap_some!(self.tokens.next()).type_,
+				|TokenType::NotEq => {
+					self.advance();
+					unwrap_some!(self.tokens.next()).type_
+				},
 				_ => return l_value,
 			};
 			let r_value = self.parse_expression();
@@ -77,6 +87,7 @@ impl Parser {
 
 	pub fn parse_unop(&mut self) -> Result<ExprValue>{
 		// Eat the operator while working.
+		self.advance();
 		let op = match unwrap_some!(self.tokens.next()).type_{
 			t => Box::new(t),
 		};
@@ -85,23 +96,29 @@ impl Parser {
 	}
 
 	pub fn parse_paren_expression(&mut self) -> Result<ExprValue> {
+		self.advance();
 		self.tokens.next(); // Eat '('
 		let expr = self.parse_expression()
 					.unwrap();
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
+			self.advance();
 			self.tokens.next(); // Eat ')'
 			return Ok(expr);
 		}
 		else {
-			return Err("Missing closing parenthesis".to_string())
+			return Err(format!("Missing closing parenthesis {:#?}:{:#?}",
+				self.line_no,
+				self.pos).to_string())
 		}
 	}
 
 	pub fn parse_if_else(&mut self) -> Result<ExprValue> {
+		self.advance();
 		self.tokens.next(); // Eat 'if'
 		let mut expressions_if: Vec<ExprValue> = Vec::new();
 		let mut expressions_else: Vec<ExprValue> = Vec::new();
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::LParen{
+			self.advance();
 			self.tokens.next(); // Eat '('
 		}
 		else {
@@ -111,6 +128,7 @@ impl Parser {
 		let cond = Box::new(self.parse_expression().unwrap());
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
+			self.advance();
 			self.tokens.next(); // Eat ')'
 		}
 		else {
@@ -119,6 +137,7 @@ impl Parser {
 		}
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::LBrace{
+			self.advance();
 			self.tokens.next(); // Eat '{'
 		}
 		else {
@@ -141,12 +160,17 @@ impl Parser {
 			}
 			// Eat the semicolons
 			match unwrap_some!(self.tokens.peek()).type_ {
-				TokenType::Semicolon => {self.tokens.next(); continue;}, 
-				_ => {break}
+				TokenType::Semicolon => {
+					self.advance();
+					self.tokens.next(); 
+					continue;
+				}, 
+				_ => return Err("Expected Semicolon".to_string())
 			}
 		}
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
+			self.advance();
 			self.tokens.next(); // Eat '}'
 		}
 		else {
@@ -154,6 +178,7 @@ impl Parser {
 		}
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::Else{
+			self.advance();
 			self.tokens.next(); // Eat 'else'
 		}
 		else {
@@ -161,6 +186,7 @@ impl Parser {
 		}
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::LBrace{
+			self.advance();
 			self.tokens.next(); // Eat '{'
 		}
 		else {
@@ -183,12 +209,17 @@ impl Parser {
 			}
 			// Eat the semicolons
 			match unwrap_some!(self.tokens.peek()).type_ {
-				TokenType::Semicolon => {self.tokens.next(); continue;}, 
+				TokenType::Semicolon => {
+					self.advance();
+					self.tokens.next(); 
+					continue;
+				}, 
 				_ => {break}
 			}
 		}
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
+			self.advance();
 			self.tokens.next(); // Eat '}'
 		}
 		else {
@@ -203,6 +234,7 @@ impl Parser {
 	}
 
 	pub fn parse_declaration(&mut self) -> Result<ExprValue> {
+		self.advance();
 		self.tokens.next(); // Eat `let`
 		let name: String;
 		let type_:String;
@@ -213,6 +245,7 @@ impl Parser {
 		}
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::Colon{
+			self.advance();
 			self.tokens.next(); // Eat ':'
 		}
 		else {
@@ -228,16 +261,19 @@ impl Parser {
 	}
 
 	pub fn parse_true(&mut self) -> Result<ExprValue> {
+		self.advance();
 		self.tokens.next(); // Eat `true`
 		return Ok(ExprValue::Boolean(true));
 	}
 
 	pub fn parse_false(&mut self) -> Result<ExprValue>{
+		self.advance();
 		self.tokens.next(); // Eat `false`
 		return Ok(ExprValue::Boolean(false));
 	}
 
 	pub fn parse_identifier(&mut self) -> Result<ExprValue> {
+		self.advance();
 		// Eat the identifier and work.
 		let name = match unwrap_some!(self.tokens.next()).type_ {
 			TokenType::Identifier(n) => n,
@@ -246,26 +282,31 @@ impl Parser {
 		// Check for assignment
 		match unwrap_some!(self.tokens.peek()).type_{
 			TokenType::Assign => {
+				self.advance();
 				self.tokens.next(); // Eat '='
 				let value = Box::new(self.parse_expression().unwrap());
 				return Ok(ExprValue::Assign{name:name, value:value})
 			}
 			TokenType::PlusEq => {
+				self.advance();
 				let op = Box::new(unwrap_some!(self.tokens.next()).type_); // Eat '+='
 				let value = Box::new(self.parse_expression().unwrap());
 				return Ok(ExprValue::AugAssign{name:name, op:op, value:value})
 			}
 			TokenType::MinusEq => {
+				self.advance();
 				let op = Box::new(unwrap_some!(self.tokens.next()).type_); // Eat '-='
 				let value = Box::new(self.parse_expression().unwrap());
 				return Ok(ExprValue::AugAssign{name:name, op:op, value:value})
 			}
 			TokenType::DivEq => {
+				self.advance();
 				let op = Box::new(unwrap_some!(self.tokens.next()).type_); // Eat '/='
 				let value = Box::new(self.parse_expression().unwrap());
 				return Ok(ExprValue::AugAssign{name:name, op:op, value:value})
 			}
 			TokenType::MulEq => {
+				self.advance();
 				let op = Box::new(unwrap_some!(self.tokens.next()).type_); // Eat '*='
 				let value = Box::new(self.parse_expression().unwrap());
 				return Ok(ExprValue::AugAssign{name:name, op:op, value:value})
@@ -274,6 +315,7 @@ impl Parser {
 		}
 		// Check for function call
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::LParen{
+			self.advance();
 			self.tokens.next(); // Eat '('
 			let mut values = Vec::new();
 			let arg1; 
@@ -281,6 +323,7 @@ impl Parser {
 				Ok(expr) => arg1 = expr,
 				Err(_) => {
 					if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
+						self.advance();
 						self.tokens.next();
 						return Ok(ExprValue::FnCall(name, values));
 					}
@@ -290,10 +333,12 @@ impl Parser {
 			values.insert(values.len(), arg1);
 			loop {
 				if unwrap_some!(self.tokens.peek()).type_ == TokenType::Comma{
+					self.advance();
 					self.tokens.next(); // Eat ','
 					values.insert(values.len(),self.parse_expression().unwrap());
 				} 
 				else if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
+					self.advance();
 					self.tokens.next(); // Eat ')'
 				} 
 				else {
@@ -307,12 +352,22 @@ impl Parser {
 	}
 
 	pub fn parse_return(&mut self) -> Result<ExprValue>{
+		self.advance();
 		self.tokens.next(); // Eat `return`
-		let expr = Box::new(self.parse_expression().unwrap());
-		return Ok(ExprValue::Return(expr));
+		let expr = self.parse_expression().unwrap();
+		match unwrap_some!(self.tokens.peek()).type_ {
+			TokenType::Semicolon => {
+				self.advance();
+				self.tokens.next(); // Eat `;`
+				Ok(ExprValue::Return(Box::new(expr)))
+			},
+			_ => Err(format!("Expected Semicolon {:#?}:{:#?}", self.line_no, self.pos).to_string()),
+		}
+		
 	}
 
 	pub fn parse_string(&mut self) -> Result<ExprValue>{
+		self.advance();
 		match unwrap_some!(self.tokens.next()).type_ {
 			TokenType::Str(s) => return Ok(ExprValue::Str(s)),
 			_ => unreachable!()
