@@ -1,10 +1,12 @@
 use crate::parser::{Parser, ExprValue};
 use crate::lexer::tokens::{TokenType};
 use crate::{unwrap_some,Result,Symbol};
+use log::trace;
 
 impl Parser {
 
 	pub fn parse_expression(&mut self)->Result<ExprValue>{
+		trace!("Parsing expression");
 		let l_value: Result<ExprValue> = match unwrap_some!(self.tokens.peek()).type_ {
 			TokenType::LParen => {
 				self.tokens.next();
@@ -86,6 +88,7 @@ impl Parser {
 	}
 
 	pub fn parse_unop(&mut self) -> Result<ExprValue>{
+		trace!("Parsing unop");
 		// Eat the operator while working.
 		self.advance();
 		let op = match unwrap_some!(self.tokens.next()).type_{
@@ -96,6 +99,7 @@ impl Parser {
 	}
 
 	pub fn parse_paren_expression(&mut self) -> Result<ExprValue> {
+		trace!("Parsing paren expr");
 		self.advance();
 		self.tokens.next(); // Eat '('
 		let expr = self.parse_expression()
@@ -113,6 +117,7 @@ impl Parser {
 	}
 
 	pub fn parse_if_else(&mut self) -> Result<ExprValue> {
+		trace!("Parsing if else");
 		self.advance();
 		self.tokens.next(); // Eat 'if'
 		let mut expressions_if: Vec<ExprValue> = Vec::new();
@@ -323,34 +328,26 @@ impl Parser {
 			self.advance();
 			self.tokens.next(); // Eat '('
 			let mut values = Vec::new();
-			let arg1;
-			match self.parse_expression(){
-				Ok(expr) => arg1 = expr,
-				Err(_) => {
-					if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
-						self.advance();
-						self.tokens.next(); // Eat ')'
-						return Ok(ExprValue::FnCall(name, values));
-					}
-					return Err("Invalid Function call".to_string())
-				}
-			};
-			values.insert(values.len(), arg1);
 			loop {
-				if unwrap_some!(self.tokens.peek()).type_ == TokenType::Comma{
-					self.advance();
-					self.tokens.next(); // Eat ','
-					values.insert(values.len(),self.parse_expression().unwrap());
+				match self.parse_expression(){
+					Ok(expr) => values.insert(values.len(), expr),
+					Err(e) => {
+						if unwrap_some!(self.tokens.peek()).type_ == TokenType::Comma{ break;}
+						else if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
+							self.advance();
+							self.tokens.next(); // Eat ')'
+							return Ok(ExprValue::FnCall(name, values))
+						}
+						else {return Err(e)}
+					}
 				}
-				else if unwrap_some!(self.tokens.peek()).type_ == TokenType::RParen{
-					self.advance();
-					self.tokens.next(); // Eat ')'
-				} 
-				else {
-					return Err("Invalid function call.".to_string())
+				match unwrap_some!(self.tokens.peek()).type_ {
+					TokenType::Comma => {
+						self.advance();
+						self.tokens.next(); // Eat ','
+					}
+					_ => {}
 				}
-
-				return Ok(ExprValue::FnCall(name, values))
 			}
 		}
 		return Ok(ExprValue::Identifier(name) )
