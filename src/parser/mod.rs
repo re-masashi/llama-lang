@@ -1,6 +1,5 @@
 use crate::lexer::tokens::{Token,TokenType};
 use crate::SymbolTable;
-use crate::unwrap_some;
 use std::iter::Peekable;
 use std::vec::IntoIter;
 use std::collections::HashMap;

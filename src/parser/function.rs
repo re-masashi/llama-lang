@@ -220,11 +220,15 @@ impl Parser {
 				 	}
 				 	self.advance();
 				 	self.tokens.next(); // Eat '{'
+
 				 	loop {
 				 		match self.parse_expression() {
 				 			Ok(expr) => expressions.insert(expressions.len(),expr),
-				 			Err(e) if e == "Invalid expression" => {
-				 				if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
+				 			Err(e) if e == format!("Invalid expression {:#?}:{:#?}", self.line_no, self.pos) => {
+				 				if (
+				 					unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace ||
+				 					unwrap_some!(self.tokens.peek()).type_ == TokenType::Semicolon
+				 				){
 				 					break;
 				 				}
 				 				else {
@@ -232,20 +236,24 @@ impl Parser {
 				 				}
 				 			},
 				 			Err(e) => return Err(e),
-
 				 		}
 				 		// Eat the semicolons
 				 		match unwrap_some!(self.tokens.peek()).type_ {
 				 			TokenType::Semicolon => {
 				 				self.advance();
-				 				self.tokens.next();
+				 				self.tokens.next(); 
 				 				continue;
 				 			}, 
-				 			_ => break,
+				 			TokenType::RBrace => break,
+				 			_ => {
+				 				print!("{:?}", self.tokens.peek());
+				 				return Err("Expected semicolon or '}'".to_string())
+				 			}
 				 		}
 				 	}
+
 				 	if unwrap_some!(self.tokens.peek()).type_ != TokenType::RBrace{
-				 		print!("{:?}", self.tokens.peek());
+				 		print!("{:?}", unwrap_some!(self.tokens.peek()).type_);
 				 		return Err("expected '}'".to_string());
 				 	}
 				 	self.advance();

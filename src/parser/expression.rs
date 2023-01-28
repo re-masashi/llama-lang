@@ -171,6 +171,8 @@ impl Parser {
 				_ => return Err("Expected semicolon or '}'".to_string())
 			}
 		}
+		
+		println!("last val{:?}", self.tokens.peek());
 
 		if unwrap_some!(self.tokens.peek()).type_ == TokenType::RBrace{
 			self.advance();
