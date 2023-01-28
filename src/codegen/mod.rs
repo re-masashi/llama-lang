@@ -180,8 +180,8 @@ impl Generator {
     /// * `output` - Path to the executable.
     pub fn generate_executable(&self, object_file: &str, output: &str) -> Result<()> {
         // TODO is there a better way to do this?
-        match Command::new("gcc")
-            .args(&[object_file, "-o", output])
+        match Command::new("g++")
+            .args(&[object_file, "stdllama.cc", "-o", output])
             .spawn()
         {
             Ok(_) => {

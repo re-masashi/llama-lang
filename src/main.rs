@@ -67,9 +67,6 @@ pub fn main() {
                 generator.generate_executable(&object_file, &cli_input.output_path),
                 "Linker"
             );
-            fs::remove_file(object_file).unwrap_or_else(|e| {
-                warn!("Unable to delete object file:\n{}", e);
-            });
         },
     }
 }
