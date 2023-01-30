@@ -2,18 +2,6 @@ extern next_int() -> i32;
 extern hello_world() -> i32;
 extern println(a: i32) -> i32;
 
-# To print from 1 to 15
-
-def ito15(i:i32)->i32{
-	if(i<=15){
-		println(i);
-		ito15(i+1);
-	}else{
-		
-	};
-	return 21;
-}
-
 def test_multi(i:i32, j:i32, k: i32)->i32{
 	hello_world();
 	return 0;

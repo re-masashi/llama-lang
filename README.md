@@ -27,23 +27,16 @@ This is just a remote stash (currently).*
 
 
 * Variables:
-    * Declaration with value
-        ```
-        let a:i32 = 5;
-        ```
-    * Declaration without value (will be assigned to trash value)
-        ```
-        let a:i32;
-        ```
-    * Referencing a variable
-        ```
-        let b:i32 = a + 5;
-        ```
-    * Reassign
-        ```
-        b = a -1;
-        
-        ```
+    * Declaration:
+    ```
+        let x: i32;    
+    ```
+    * Assignment:
+    ```
+        x = 42;    
+    ```
+    Note: Both need to be done separately.
+
 * Operations
     * Available operations `=`, `+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `+=`, `-=`, `*=`, `/=`
         ```

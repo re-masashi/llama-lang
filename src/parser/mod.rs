@@ -63,7 +63,7 @@ pub struct Parser {
 pub struct Args {
     pub name: Vec<String>,
     pub type_: Vec<String>
-} // I will this improvise later.
+} // I will  improvise this later.
 
 impl Parser {
 
@@ -98,5 +98,4 @@ impl Parser {
                 None => panic!("Dunno"),
             }.line_no;
     }
-
 }
