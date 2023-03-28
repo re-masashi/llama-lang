@@ -142,12 +142,12 @@ impl Generator {
                 for expr in else_{
                     self.gen_expression(&*expr, current_fn)?;
                 }
+                core::LLVMBuildBr(self.builder, end);
 
                 core::LLVMPositionBuilderAtEnd(self.builder, entry);
                 let cond_llvm = self.gen_expression(cond, current_fn)?;
-
                 core::LLVMBuildCondBr(self.builder, cond_llvm, if_bb, else_bb);
-
+                core::LLVMPositionBuilderAtEnd(self.builder, end);
                 Ok(cond_llvm)
             }
 
