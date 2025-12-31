@@ -2,9 +2,9 @@
 name = "llamac"
 version = "0.0.1"
 authors = ["Nafi Amaan Hossain"]
-edition = "2018"
+edition = "2024"
 
-description = "A simple 'TOY' language."
+description = "A simple language."
 license = "MIT"
 readme = "README.md"
 
@@ -12,10 +12,8 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-llvm-sys = "90"
-libc = "0.2.70"
-
 clap = "2.33.0"
+logos = "0.14"
 
 log = "0.4.8"
 env_logger = "0.7.1"

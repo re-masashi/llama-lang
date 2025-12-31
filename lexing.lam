@@ -1,0 +1,129 @@
+extern fn something() -> i32
+extern fn something_else(x: i32) -> i32
+extern fn another_thing(x: f32, y: i32) -> i32
+
+# this is a comment
+
+const MAX_VALUE: i32 = 100
+
+@doc("This is a documented struct")
+@serialize # attributes can be stacked
+struct MyStruct<T: Walkable>
+  @censored
+  a: i32
+  b: f32
+  c: T
+end
+
+@doc("This is a documented enum")
+enum MyEnum
+  VariantOne
+  VariantTwo(i32, f32)
+  VariantThree { x: i32, y: f32 }
+end
+
+fn some_function(x: i32, y: f32) -> i32
+  let result = x + y as i32
+  return result
+end
+
+fn another_function()
+  @cfg(debug) # expressions can have attributes too!
+  let s = MyStruct { a: 10, b: 20.5f64, c: SomeWalkableType {} }
+  match s.c
+    SomeWalkableType {} => 1,
+    _ => 0
+  end
+end
+
+fn generic_function<T: Meow>(item: T) -> bool
+  if item == item
+    true
+  else
+    false
+  end
+end
+
+trait Meow
+  fn meow() -> str
+end
+
+impl Meow for Cat
+  fn meow() -> str
+    "Meow!"
+  end
+end
+
+impl Meow for Dog<T>
+  fn meow() -> str
+    "Woof!"
+  end
+end
+
+trait Clone
+  fn clone() -> Self
+end
+
+trait Walkable
+  fn walk(self) -> str
+end
+
+impl Walkable for SomeWalkableType
+  fn walk(self) -> str
+    "Walking!"
+  end
+end
+
+impl MyStruct<i32>
+  fn add_one(self) -> i32
+    self.a + 1
+  end
+end
+
+fn main(argv: [String])
+  let my_enum = MyEnum::VariantTwo(42, 3.14)
+  match my_enum
+    MyEnum::VariantOne => println("It's Variant One"), # all enums must use `::`. no Some or Result sugar
+    MyEnum::VariantTwo(x, y) => println("It's Variant Two with values: ", x, ", ", y),
+    MyEnum::VariantThree { x, y } => println("It's Variant Three with fields: ", x, ", ", y)
+  end
+
+  let res: i32 = some_function(5, 10.0) # optional type annotation
+  
+  for i in 0..MAX_VALUE
+    println("Value: ", i)
+  end
+
+  for item in [1, 2, 3, 4, 5]
+    println("Item: ", item)
+  end
+
+  while res < MAX_VALUE
+    res = res + 1
+  end
+
+  for ch in "Hello, World!"
+    println("Character: ", ch)
+  end
+
+  let mylam = fn(x: i32) -> i32
+    x * x
+  end
+
+  let myunannotatedlam = fn(x)
+    x + 1
+  end
+
+  let mytuple: (i32, i32) = 20, 20 # comma is like a postfix op in terms of parsing. and tuples DONT need parens unless theyre in type annotations
+  
+  let myarray = [1, 2, 3, 4, 5]
+  let myrowtype: { a: i32, b: f32, c: str } = {a: 10, b: 20.5, c: "Hello"}
+  
+  let new_array = [1, ..array, 6, 7, 8] # array spread
+  let new_row = { ..myrowtype, d: 30 } # row spread
+
+  let mystruct_instance = MyStruct { a: 1, b: 2.0, c: 3 }; # no ::new supported
+  
+  let cloned_struct = a |> b(c, d) |> e.f # . is dot access. not composition
+
+end

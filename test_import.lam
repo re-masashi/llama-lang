@@ -1,0 +1,7 @@
+import "std"
+import "my_module".{foo, bar as baz}
+
+fn main()
+    let x: i32 = 42
+    x
+end
