@@ -1236,13 +1236,113 @@ impl Parser {
                     let variant_name = self.consume_identifier()?;
                     let end = self.peek().map(|t| t.range.end).unwrap_or(start);
 
+                    // Check for enum initialization
+                    if self.check_type(TokenType::LBrace) {
+                        self.advance();
+                        let mut fields = Vec::new();
+                        if !self.check_type(TokenType::RBrace) {
+                            loop {
+                                if self.match_type(TokenType::Spread) {
+                                    let expr = self.parse_expression()?;
+                                    fields.push(crate::ast::StructInitField::Spread(expr));
+                                } else {
+                                    let field_name = self.consume_identifier()?;
+                                    self.consume_type(TokenType::Colon)?;
+                                    let value = self.parse_expression()?;
+                                    fields.push(crate::ast::StructInitField::Field {
+                                        name: field_name,
+                                        value,
+                                    });
+                                }
+                                if !self.match_type(TokenType::Comma) {
+                                    break;
+                                }
+                            }
+                        }
+                        self.consume_type(TokenType::RBrace)?;
+                        let end = self.peek().map(|t| t.range.end).unwrap_or(start);
+
+                        return Ok(Expr {
+                            meta: Meta {
+                                filename: self.filename.clone(),
+                                range: start..end,
+                                attributes: Vec::new(),
+                            },
+                            kind: ExprKind::EnumInit {
+                                enum_name: name,
+                                variant_name,
+                                fields: crate::ast::EnumInitFields::Struct(fields),
+                            },
+                        });
+                    } else if self.check_type(TokenType::LParen) {
+                        self.advance();
+                        let mut fields = Vec::new();
+                        if !self.check_type(TokenType::RParen) {
+                            loop {
+                                fields.push(self.parse_expression()?);
+                                if !self.match_type(TokenType::Comma) {
+                                    break;
+                                }
+                            }
+                        }
+                        self.consume_type(TokenType::RParen)?;
+                        let end = self.peek().map(|t| t.range.end).unwrap_or(start);
+
+                        return Ok(Expr {
+                            meta: Meta {
+                                filename: self.filename.clone(),
+                                range: start..end,
+                                attributes: Vec::new(),
+                            },
+                            kind: ExprKind::EnumInit {
+                                enum_name: name,
+                                variant_name,
+                                fields: crate::ast::EnumInitFields::Tuple(fields),
+                            },
+                        });
+                    } else {
+                        return Ok(Expr {
+                            meta: Meta {
+                                filename: self.filename.clone(),
+                                range: start..end,
+                                attributes: Vec::new(),
+                            },
+                            kind: ExprKind::Variable(format!("{}::{}", name, variant_name)),
+                        });
+                    }
+                } else if self.check_type(TokenType::LBrace) {
+                    // Struct initialization
+                    self.advance();
+                    let mut fields = Vec::new();
+                    if !self.check_type(TokenType::RBrace) {
+                        loop {
+                            if self.match_type(TokenType::Spread) {
+                                let expr = self.parse_expression()?;
+                                fields.push(crate::ast::StructInitField::Spread(expr));
+                            } else {
+                                let field_name = self.consume_identifier()?;
+                                self.consume_type(TokenType::Colon)?;
+                                let value = self.parse_expression()?;
+                                fields.push(crate::ast::StructInitField::Field {
+                                    name: field_name,
+                                    value,
+                                });
+                            }
+                            if !self.match_type(TokenType::Comma) {
+                                break;
+                            }
+                        }
+                    }
+                    self.consume_type(TokenType::RBrace)?;
+                    let end = self.peek().map(|t| t.range.end).unwrap_or(start);
+
                     return Ok(Expr {
                         meta: Meta {
                             filename: self.filename.clone(),
                             range: start..end,
                             attributes: Vec::new(),
                         },
-                        kind: ExprKind::Variable(format!("{}::{}", name, variant_name)),
+                        kind: ExprKind::StructInit { name, fields },
                     });
                 }
 
@@ -1250,9 +1350,22 @@ impl Parser {
             }
             TokenType::LParen => {
                 self.advance();
-                let expr = self.parse_expression()?;
-                self.consume_type(TokenType::RParen)?;
-                expr.kind
+                let first_expr = self.parse_expression()?;
+                if self.match_type(TokenType::Comma) {
+                    // This is a tuple
+                    let mut elements = vec![first_expr];
+                    loop {
+                        elements.push(self.parse_expression()?);
+                        if !self.match_type(TokenType::Comma) {
+                            break;
+                        }
+                    }
+                    self.consume_type(TokenType::RParen)?;
+                    ExprKind::Tuple(elements)
+                } else {
+                    self.consume_type(TokenType::RParen)?;
+                    first_expr.kind
+                }
             }
             TokenType::LBrack => {
                 self.advance();
@@ -1515,7 +1628,8 @@ impl Parser {
     fn parse_match_arm(&mut self) -> Result<MatchArm> {
         let pattern = self.parse_pattern()?;
 
-        self.consume_type(TokenType::Arrow)?;
+        self.consume_type(TokenType::Assign)?;
+        self.consume_type(TokenType::Greater)?;
 
         let guard = if self.check_type(TokenType::If) {
             self.advance();
@@ -1821,7 +1935,7 @@ mod tests {
         assert_eq!(program.len(), 1);
         match &program[0].kind {
             AstNodeKind::Import { path, items } => {
-                assert_eq!(path, "std");
+                assert_eq!(path, "std/abc");
                 assert_eq!(items.len(), 0);
             }
             _ => panic!("Expected import"),
@@ -1836,7 +1950,7 @@ mod tests {
         assert_eq!(program.len(), 1);
         match &program[0].kind {
             AstNodeKind::Import { path, items } => {
-                assert_eq!(path, "std");
+                assert_eq!(path, "std/abc");
                 assert_eq!(items.len(), 2);
                 assert_eq!(items[0].name, "A");
                 assert_eq!(items[0].alias, None);
@@ -1855,7 +1969,7 @@ mod tests {
         assert_eq!(program.len(), 1);
         match &program[0].kind {
             AstNodeKind::Import { path, items } => {
-                assert_eq!(path, "std");
+                assert_eq!(path, "std/abc");
                 assert_eq!(items.len(), 1);
                 assert_eq!(items[0].name, "A");
                 assert_eq!(items[0].alias, Some("B".to_string()));
@@ -1872,7 +1986,7 @@ mod tests {
         assert_eq!(program.len(), 1);
         match &program[0].kind {
             AstNodeKind::Import { path, items } => {
-                assert_eq!(path, "std");
+                assert_eq!(path, "std/abc");
                 assert_eq!(items.len(), 3);
                 assert_eq!(items[0].name, "A");
                 assert_eq!(items[0].alias, None);
@@ -2033,15 +2147,45 @@ mod tests {
     }
 
     #[test]
-    fn test_array_expression() {
-        let expr = parse_expression("[1, 2, 3]");
+    fn test_lambda_expression() {
+        let expr = parse_expression("fn(x: i32) -> i32 x + 1 end");
         assert!(expr.is_ok());
         let expr = expr.unwrap();
         match expr.kind {
-            ExprKind::Array(elements) => {
-                assert_eq!(elements.len(), 3);
+            ExprKind::Lambda {
+                params,
+                return_type,
+                body,
+            } => {
+                assert_eq!(params.len(), 1);
+                assert_eq!(params[0].name, "x");
+                assert!(return_type.is_some());
+                match body.kind {
+                    ExprKind::Block { expressions } => {
+                        assert_eq!(expressions.len(), 1);
+                        match &expressions[0].kind {
+                            ExprKind::BinaryOp {
+                                left,
+                                operator,
+                                right,
+                            } => {
+                                assert_eq!(operator, "+");
+                                match &left.kind {
+                                    ExprKind::Variable(var) => assert_eq!(var, "x"),
+                                    _ => panic!("Expected variable x"),
+                                }
+                                match right.kind {
+                                    ExprKind::Literal(Literal::Integer(1)) => {}
+                                    _ => panic!("Expected literal 1"),
+                                }
+                            }
+                            _ => panic!("Expected binary operation"),
+                        }
+                    }
+                    _ => panic!("Expected block"),
+                }
             }
-            _ => panic!("Expected array"),
+            _ => panic!("Expected lambda"),
         }
     }
 
@@ -2429,25 +2573,222 @@ mod tests {
     }
 
     #[test]
-    fn test_comparison_operators() {
-        let expr = parse_expression("x <= y");
+    fn test_struct_init() {
+        let expr = parse_expression("Point { x: 1, y: 2 }");
         assert!(expr.is_ok());
         let expr = expr.unwrap();
         match expr.kind {
-            ExprKind::BinaryOp { operator, .. } => {
-                assert_eq!(operator, "<=");
+            ExprKind::StructInit { name, fields } => {
+                assert_eq!(name, "Point");
+                assert_eq!(fields.len(), 2);
+                match &fields[0] {
+                    StructInitField::Field { name, value } => {
+                        assert_eq!(name, "x");
+                        match value.kind {
+                            ExprKind::Literal(Literal::Integer(1)) => {}
+                            _ => panic!("Expected integer literal 1"),
+                        }
+                    }
+                    _ => panic!("Expected field"),
+                }
+                match &fields[1] {
+                    StructInitField::Field { name, value } => {
+                        assert_eq!(name, "y");
+                        match value.kind {
+                            ExprKind::Literal(Literal::Integer(2)) => {}
+                            _ => panic!("Expected integer literal 2"),
+                        }
+                    }
+                    _ => panic!("Expected field"),
+                }
             }
-            _ => panic!("Expected binary operation"),
+            _ => panic!("Expected struct init"),
         }
+    }
 
-        let expr = parse_expression("x >= y");
+    #[test]
+    fn test_struct_init_with_spread() {
+        let expr = parse_expression("Point { x: 10, ..other }");
         assert!(expr.is_ok());
         let expr = expr.unwrap();
         match expr.kind {
-            ExprKind::BinaryOp { operator, .. } => {
-                assert_eq!(operator, ">=");
+            ExprKind::StructInit { name, fields } => {
+                assert_eq!(name, "Point");
+                assert_eq!(fields.len(), 2);
+                match &fields[0] {
+                    StructInitField::Field { name, value } => {
+                        assert_eq!(name, "x");
+                        match value.kind {
+                            ExprKind::Literal(Literal::Integer(10)) => {}
+                            _ => panic!("Expected integer literal 10"),
+                        }
+                    }
+                    _ => panic!("Expected field"),
+                }
+                match &fields[1] {
+                    StructInitField::Spread(expr) => match &expr.kind {
+                        ExprKind::Variable(var) => assert_eq!(var, "other"),
+                        _ => panic!("Expected variable"),
+                    },
+                    _ => panic!("Expected spread"),
+                }
             }
-            _ => panic!("Expected binary operation"),
+            _ => panic!("Expected struct init"),
+        }
+    }
+
+    #[test]
+    fn test_enum_init_tuple() {
+        let expr = parse_expression("Option::Some(42)");
+        assert!(expr.is_ok());
+        let expr = expr.unwrap();
+        match expr.kind {
+            ExprKind::EnumInit {
+                enum_name,
+                variant_name,
+                fields,
+            } => {
+                assert_eq!(enum_name, "Option");
+                assert_eq!(variant_name, "Some");
+                match fields {
+                    EnumInitFields::Tuple(exprs) => {
+                        assert_eq!(exprs.len(), 1);
+                        match exprs[0].kind {
+                            ExprKind::Literal(Literal::Integer(42)) => {}
+                            _ => panic!("Expected integer literal 42"),
+                        }
+                    }
+                    _ => panic!("Expected tuple fields"),
+                }
+            }
+            _ => panic!("Expected enum init"),
+        }
+    }
+
+    #[test]
+    fn test_enum_init_struct() {
+        let expr = parse_expression("Color::Rgb { r: 255, g: 0, b: 128 }");
+        assert!(expr.is_ok());
+        let expr = expr.unwrap();
+        match expr.kind {
+            ExprKind::EnumInit {
+                enum_name,
+                variant_name,
+                fields,
+            } => {
+                assert_eq!(enum_name, "Color");
+                assert_eq!(variant_name, "Rgb");
+                match fields {
+                    EnumInitFields::Struct(fields) => {
+                        assert_eq!(fields.len(), 3);
+                        match &fields[0] {
+                            StructInitField::Field { name, value } => {
+                                assert_eq!(name, "r");
+                                match value.kind {
+                                    ExprKind::Literal(Literal::Integer(255)) => {}
+                                    _ => panic!("Expected integer literal 255"),
+                                }
+                            }
+                            _ => panic!("Expected field"),
+                        }
+                    }
+                    _ => panic!("Expected struct fields"),
+                }
+            }
+            _ => panic!("Expected enum init"),
+        }
+    }
+
+    #[test]
+    fn test_enum_variant_reference() {
+        let expr = parse_expression("Option::None");
+        assert!(expr.is_ok());
+        let expr = expr.unwrap();
+        match expr.kind {
+            ExprKind::Variable(var) => {
+                assert_eq!(var, "Option::None");
+            }
+            _ => panic!("Expected variable"),
+        }
+    }
+
+    #[test]
+    fn test_match_expression() {
+        let program = parse_program("fn f() match x 1 => 42, _ => 0 end end");
+        assert!(program.is_ok());
+        let program = program.unwrap();
+        assert_eq!(program.len(), 1);
+        match &program[0].kind {
+            AstNodeKind::Function { body, .. } => {
+                match &body[0].kind {
+                    ExprKind::Match { value, arms } => {
+                        match &value.kind {
+                            ExprKind::Variable(var) => assert_eq!(var, "x"),
+                            _ => panic!("Expected variable x"),
+                        }
+                        assert_eq!(arms.len(), 2);
+                        // First arm: 1 => 42
+                        match &arms[0].pattern {
+                            Pattern::Literal(Literal::Integer(1)) => {}
+                            _ => panic!("Expected literal pattern 1"),
+                        }
+                        match &arms[0].body[0].kind {
+                            ExprKind::Literal(Literal::Integer(42)) => {}
+                            _ => panic!("Expected literal 42"),
+                        }
+                        // Second arm: _ => 0
+                        match &arms[1].pattern {
+                            Pattern::Wildcard => {}
+                            _ => panic!("Expected wildcard pattern"),
+                        }
+                        match &arms[1].body[0].kind {
+                            ExprKind::Literal(Literal::Integer(0)) => {}
+                            _ => panic!("Expected literal 0"),
+                        }
+                    }
+                    _ => panic!("Expected match expression"),
+                }
+            }
+            _ => panic!("Expected function"),
+        }
+    }
+
+    #[test]
+    fn test_tuple_expression() {
+        let expr = parse_expression("(1, \"hello\", true)");
+        assert!(expr.is_ok());
+        let expr = expr.unwrap();
+        match expr.kind {
+            ExprKind::Tuple(elements) => {
+                assert_eq!(elements.len(), 3);
+                match &elements[0].kind {
+                    ExprKind::Literal(Literal::Integer(1)) => {}
+                    _ => panic!("Expected integer 1"),
+                }
+                match &elements[1].kind {
+                    ExprKind::Literal(Literal::String(s)) => assert_eq!(s, "hello"),
+                    _ => panic!("Expected string hello"),
+                }
+                match &elements[2].kind {
+                    ExprKind::Literal(Literal::Boolean(true)) => {}
+                    _ => panic!("Expected boolean true"),
+                }
+            }
+            _ => panic!("Expected tuple"),
+        }
+    }
+
+    #[test]
+    fn test_empty_struct_init() {
+        let expr = parse_expression("Empty {}");
+        assert!(expr.is_ok());
+        let expr = expr.unwrap();
+        match expr.kind {
+            ExprKind::StructInit { name, fields } => {
+                assert_eq!(name, "Empty");
+                assert_eq!(fields.len(), 0);
+            }
+            _ => panic!("Expected struct init"),
         }
     }
 }

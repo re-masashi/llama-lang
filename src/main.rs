@@ -1,6 +1,6 @@
-use std::env;
 use llamac::lexer::Lexer;
 use llamac::parser::Parser;
+use std::env;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -11,9 +11,7 @@ fn main() {
     };
 
     let source = std::fs::read_to_string(filename).expect("Failed to read file");
-    let tokens: Vec<_> = Lexer::from_text(&source)
-        .filter_map(|t| t.ok())
-        .collect();
+    let tokens: Vec<_> = Lexer::from_text(&source).filter_map(|t| t.ok()).collect();
 
     println!("Tokens: {:?}", tokens);
 

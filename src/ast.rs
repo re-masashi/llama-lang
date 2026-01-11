@@ -216,6 +216,15 @@ pub enum ExprKind {
         value: Box<Expr>,
         arms: Vec<MatchArm>,
     },
+    StructInit {
+        name: String,
+        fields: Vec<StructInitField>,
+    },
+    EnumInit {
+        enum_name: String,
+        variant_name: String,
+        fields: EnumInitFields,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -272,4 +281,16 @@ pub enum ArrayElement {
 pub enum RowField {
     Field { name: String, value: Expr },
     Spread(Expr),
+}
+
+#[derive(Debug, Clone)]
+pub enum StructInitField {
+    Field { name: String, value: Expr },
+    Spread(Expr),
+}
+
+#[derive(Debug, Clone)]
+pub enum EnumInitFields {
+    Tuple(Vec<Expr>),
+    Struct(Vec<StructInitField>),
 }
