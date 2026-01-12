@@ -1,5 +1,6 @@
 use llamac::lexer::Lexer;
 use llamac::parser::Parser;
+use llamac::typechecker::TypeChecker;
 use std::env;
 
 fn main() {
@@ -21,6 +22,16 @@ fn main() {
             println!("Parsed program successfully!");
             for node in &program {
                 println!("{:?}", node);
+            }
+
+            let mut checker = TypeChecker::new();
+            match checker.typecheck(program) {
+                Ok(typed_program) => {
+                    println!("Typechecked successfully!");
+                }
+                Err(e) => {
+                    println!("Typecheck error: {}", e);
+                }
             }
         }
         Err(e) => {
