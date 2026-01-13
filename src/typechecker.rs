@@ -646,6 +646,54 @@ impl TypeChecker {
         }
     }
 
+    fn validate_constraint(&self, trait_name: &str) -> Result<(), String> {
+        if !self.trait_env.contains_key(trait_name) {
+            Err(format!("trait '{}' not defined", trait_name))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn process_generic_params(
+        &mut self,
+        generic_params: &[ast::GenericParam],
+    ) -> Result<HashMap<String, typed_ast::Type>, String> {
+        let mut generic_map = HashMap::new();
+        for gp in generic_params {
+            let tv = self.fresh_var();
+            generic_map.insert(gp.name.clone(), tv.clone());
+
+            for constraint in &gp.constraints {
+                if let ast::TypeAnnotationKind::Constructor { name, .. } = &constraint.kind {
+                    self.validate_constraint(name)?;
+                    self.constraints
+                        .push(Constraint::Class(name.clone(), vec![tv.clone()]));
+                }
+            }
+        }
+        Ok(generic_map)
+    }
+
+    fn process_method_generic_params(
+        &mut self,
+        generic_params: &[ast::GenericParam],
+    ) -> Result<HashMap<String, typed_ast::Type>, String> {
+        let mut generic_map = HashMap::new();
+        for gp in generic_params {
+            let tv = self.fresh_var();
+            generic_map.insert(gp.name.clone(), tv.clone());
+
+            for constraint in &gp.constraints {
+                if let ast::TypeAnnotationKind::Constructor { name, .. } = &constraint.kind {
+                    self.validate_constraint(name)?;
+                    self.constraints
+                        .push(Constraint::Class(name.clone(), vec![tv.clone()]));
+                }
+            }
+        }
+        Ok(generic_map)
+    }
+
     fn typecheck_node(&mut self, node: &ast::AstNode) -> Result<typed_ast::TypedAstNode, String> {
         let typ = self.fresh_var();
         let kind = match &node.kind {
@@ -656,19 +704,7 @@ impl TypeChecker {
                 generic_params,
                 body,
             } => {
-                let mut generic_map = HashMap::new();
-                for gp in generic_params {
-                    let tv = self.fresh_var();
-                    generic_map.insert(gp.name.clone(), tv.clone());
-
-                    for constraint in &gp.constraints {
-                        if let ast::TypeAnnotationKind::Constructor { name, .. } = &constraint.kind
-                        {
-                            self.constraints
-                                .push(Constraint::Class(name.clone(), vec![tv.clone()]));
-                        }
-                    }
-                }
+                let generic_map = self.process_generic_params(generic_params)?;
                 let old_generic_mapping = std::mem::replace(&mut self.generic_mapping, generic_map);
 
                 let mut arg_types = vec![];
@@ -739,19 +775,7 @@ impl TypeChecker {
                 generic_params,
                 fields,
             } => {
-                let mut generic_map = HashMap::new();
-                for gp in generic_params {
-                    let tv = self.fresh_var();
-                    generic_map.insert(gp.name.clone(), tv.clone());
-
-                    for constraint in &gp.constraints {
-                        if let ast::TypeAnnotationKind::Constructor { name, .. } = &constraint.kind
-                        {
-                            self.constraints
-                                .push(Constraint::Class(name.clone(), vec![tv.clone()]));
-                        }
-                    }
-                }
+                let generic_map = self.process_generic_params(generic_params)?;
                 let old_generic_mapping = std::mem::replace(&mut self.generic_mapping, generic_map);
 
                 let field_types = fields
@@ -790,34 +814,37 @@ impl TypeChecker {
                 generic_params,
                 methods,
             } => {
-                let mut generic_map = HashMap::new();
-                for gp in generic_params {
-                    let tv = self.fresh_var();
-                    generic_map.insert(gp.name.clone(), tv.clone());
-
-                    for constraint in &gp.constraints {
-                        if let ast::TypeAnnotationKind::Constructor { name, .. } = &constraint.kind
-                        {
-                            self.constraints
-                                .push(Constraint::Class(name.clone(), vec![tv.clone()]));
-                        }
-                    }
-                }
+                let generic_map = self.process_generic_params(generic_params)?;
                 let old_generic_mapping = std::mem::replace(&mut self.generic_mapping, generic_map);
+
+                let self_type = self.fresh_var();
+                self.generic_mapping
+                    .insert("Self".to_string(), self_type.clone());
 
                 let mut method_types = HashMap::new();
                 let typed_methods = methods
                     .iter()
                     .map(|m| {
+                        let method_generic_map = if m.generic_params.is_empty() {
+                            HashMap::new()
+                        } else {
+                            self.process_method_generic_params(&m.generic_params)
+                                .unwrap_or_else(|_| HashMap::new())
+                        };
+                        let old_mapping =
+                            std::mem::replace(&mut self.generic_mapping, method_generic_map);
+
                         let mut arg_types = vec![];
                         let typed_args = m
                             .args
                             .iter()
                             .map(|a| match a {
                                 ast::MethodParam::SelfParam => {
-                                    let self_type = self.fresh_var();
-                                    arg_types.push(self_type.clone());
-                                    typed_ast::TypedMethodParam::SelfParam { typ: self_type }
+                                    let param_self_type = self_type.clone();
+                                    arg_types.push(param_self_type.clone());
+                                    typed_ast::TypedMethodParam::SelfParam {
+                                        typ: param_self_type,
+                                    }
                                 }
                                 ast::MethodParam::TypedParam {
                                     name,
@@ -844,7 +871,7 @@ impl TypeChecker {
                             ret: Box::new(ret_type.clone()),
                         };
                         method_types.insert(m.name.clone(), method_type.clone());
-                        typed_ast::TypedMethodSignature {
+                        let typed_signature = typed_ast::TypedMethodSignature {
                             name: m.name.clone(),
                             args: typed_args,
                             return_type: m
@@ -854,7 +881,10 @@ impl TypeChecker {
                             generic_params: self.convert_generic_params(&m.generic_params),
                             meta: m.meta.clone(),
                             typ: method_type,
-                        }
+                        };
+
+                        self.generic_mapping = old_mapping;
+                        typed_signature
                     })
                     .collect();
                 self.trait_env.insert(name.clone(), method_types);
@@ -873,19 +903,7 @@ impl TypeChecker {
                 generic_params,
                 variants,
             } => {
-                let mut generic_map = HashMap::new();
-                for gp in generic_params {
-                    let tv = self.fresh_var();
-                    generic_map.insert(gp.name.clone(), tv.clone());
-
-                    for constraint in &gp.constraints {
-                        if let ast::TypeAnnotationKind::Constructor { name, .. } = &constraint.kind
-                        {
-                            self.constraints
-                                .push(Constraint::Class(name.clone(), vec![tv.clone()]));
-                        }
-                    }
-                }
+                let generic_map = self.process_generic_params(generic_params)?;
                 let old_generic_mapping = std::mem::replace(&mut self.generic_mapping, generic_map);
 
                 let variant_names = variants

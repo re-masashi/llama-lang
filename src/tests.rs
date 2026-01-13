@@ -3069,4 +3069,1060 @@ mod tests {
         let result = checker.typecheck(program);
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_issue1_generic_constraint_validation() {
+        let program = vec![ast::AstNode {
+            meta: empty_meta(),
+            kind: ast::AstNodeKind::Function {
+                name: "test".to_string(),
+                args: vec![ast::FunctionParam {
+                    name: "x".to_string(),
+                    type_annotation: ast::TypeAnnotation {
+                        meta: empty_meta(),
+                        kind: ast::TypeAnnotationKind::Constructor {
+                            name: "T".to_string(),
+                            generic_args: vec![],
+                        },
+                    },
+                }],
+                return_type: None,
+                generic_params: vec![ast::GenericParam {
+                    name: "T".to_string(),
+                    constraints: vec![ast::TypeAnnotation {
+                        meta: empty_meta(),
+                        kind: ast::TypeAnnotationKind::Constructor {
+                            name: "NonExistentTrait".to_string(),
+                            generic_args: vec![],
+                        },
+                    }],
+                }],
+                body: vec![ast::Expr {
+                    meta: empty_meta(),
+                    kind: ast::ExprKind::Literal(ast::Literal::Integer(1)),
+                }],
+            },
+        }];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("trait 'NonExistentTrait' not defined"));
+    }
+
+    #[test]
+    fn test_issue2_trait_method_generics() {
+        let program = vec![
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Trait {
+                    name: "Converter".to_string(),
+                    generic_params: vec![],
+                    methods: vec![ast::MethodSignature {
+                        name: "convert".to_string(),
+                        args: vec![
+                            ast::MethodParam::SelfParam,
+                            ast::MethodParam::TypedParam {
+                                name: "other".to_string(),
+                                type_annotation: ast::TypeAnnotation {
+                                    meta: empty_meta(),
+                                    kind: ast::TypeAnnotationKind::Constructor {
+                                        name: "U".to_string(),
+                                        generic_args: vec![],
+                                    },
+                                },
+                            },
+                        ],
+                        return_type: Some(ast::TypeAnnotation {
+                            meta: empty_meta(),
+                            kind: ast::TypeAnnotationKind::Constructor {
+                                name: "U".to_string(),
+                                generic_args: vec![],
+                            },
+                        }),
+                        generic_params: vec![ast::GenericParam {
+                            name: "U".to_string(),
+                            constraints: vec![],
+                        }],
+                        meta: empty_meta(),
+                    }],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Struct {
+                    name: "MyType".to_string(),
+                    generic_params: vec![],
+                    fields: vec![],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Impl {
+                    trait_name: Some("Converter".to_string()),
+                    for_type: ast::TypeAnnotation {
+                        meta: empty_meta(),
+                        kind: ast::TypeAnnotationKind::Constructor {
+                            name: "MyType".to_string(),
+                            generic_args: vec![],
+                        },
+                    },
+                    methods: vec![ast::AstNode {
+                        meta: empty_meta(),
+                        kind: ast::AstNodeKind::Function {
+                            name: "convert".to_string(),
+                            args: vec![
+                                ast::FunctionParam {
+                                    name: "self".to_string(),
+                                    type_annotation: ast::TypeAnnotation {
+                                        meta: empty_meta(),
+                                        kind: ast::TypeAnnotationKind::Constructor {
+                                            name: "MyType".to_string(),
+                                            generic_args: vec![],
+                                        },
+                                    },
+                                },
+                                ast::FunctionParam {
+                                    name: "other".to_string(),
+                                    type_annotation: ast::TypeAnnotation {
+                                        meta: empty_meta(),
+                                        kind: ast::TypeAnnotationKind::Constructor {
+                                            name: "i32".to_string(),
+                                            generic_args: vec![],
+                                        },
+                                    },
+                                },
+                            ],
+                            return_type: Some(ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "i32".to_string(),
+                                    generic_args: vec![],
+                                },
+                            }),
+                            generic_params: vec![],
+                            body: vec![ast::Expr {
+                                meta: empty_meta(),
+                                kind: ast::ExprKind::Variable("other".to_string()),
+                            }],
+                        },
+                    }],
+                },
+            },
+        ];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_issue3_impl_method_generics() {
+        let program = vec![
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Struct {
+                    name: "Container".to_string(),
+                    generic_params: vec![ast::GenericParam {
+                        name: "T".to_string(),
+                        constraints: vec![],
+                    }],
+                    fields: vec![ast::StructField {
+                        name: "value".to_string(),
+                        type_annotation: ast::TypeAnnotation {
+                            meta: empty_meta(),
+                            kind: ast::TypeAnnotationKind::Constructor {
+                                name: "T".to_string(),
+                                generic_args: vec![],
+                            },
+                        },
+                        meta: empty_meta(),
+                    }],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Impl {
+                    trait_name: None,
+                    for_type: ast::TypeAnnotation {
+                        meta: empty_meta(),
+                        kind: ast::TypeAnnotationKind::Constructor {
+                            name: "Container".to_string(),
+                            generic_args: vec![ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "i32".to_string(),
+                                    generic_args: vec![],
+                                },
+                            }],
+                        },
+                    },
+                    methods: vec![ast::AstNode {
+                        meta: empty_meta(),
+                        kind: ast::AstNodeKind::Function {
+                            name: "get_value".to_string(),
+                            args: vec![ast::FunctionParam {
+                                name: "self".to_string(),
+                                type_annotation: ast::TypeAnnotation {
+                                    meta: empty_meta(),
+                                    kind: ast::TypeAnnotationKind::Constructor {
+                                        name: "Container".to_string(),
+                                        generic_args: vec![ast::TypeAnnotation {
+                                            meta: empty_meta(),
+                                            kind: ast::TypeAnnotationKind::Constructor {
+                                                name: "i32".to_string(),
+                                                generic_args: vec![],
+                                            },
+                                        }],
+                                    },
+                                },
+                            }],
+                            return_type: Some(ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "i32".to_string(),
+                                    generic_args: vec![],
+                                },
+                            }),
+                            generic_params: vec![],
+                            body: vec![ast::Expr {
+                                meta: empty_meta(),
+                                kind: ast::ExprKind::DotAccess {
+                                    value: Box::new(ast::Expr {
+                                        meta: empty_meta(),
+                                        kind: ast::ExprKind::Variable("self".to_string()),
+                                    }),
+                                    field: "value".to_string(),
+                                },
+                            }],
+                        },
+                    }],
+                },
+            },
+        ];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_ok());
+
+        let typed_program = result.unwrap();
+        if let typed_ast::TypedAstNodeKind::Impl { methods, .. } = &typed_program[1].kind {
+            if let typed_ast::TypedAstNodeKind::Function {
+                args, return_type, ..
+            } = &methods[0].kind
+            {
+                assert_eq!(args.len(), 1);
+                assert_eq!(args[0].name, "self");
+                if let typed_ast::Type::Con {
+                    name,
+                    args: type_args,
+                } = &args[0].typ
+                {
+                    assert_eq!(name, "Container");
+                    assert_eq!(type_args.len(), 1);
+                    if let typed_ast::Type::Con { name: arg_name, .. } = &type_args[0] {
+                        assert_eq!(arg_name, "i32");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_issue4_trait_generic_params_propagation() {
+        let program = vec![
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Trait {
+                    name: "Display".to_string(),
+                    generic_params: vec![ast::GenericParam {
+                        name: "T".to_string(),
+                        constraints: vec![],
+                    }],
+                    methods: vec![ast::MethodSignature {
+                        name: "show".to_string(),
+                        args: vec![ast::MethodParam::SelfParam],
+                        return_type: Some(ast::TypeAnnotation {
+                            meta: empty_meta(),
+                            kind: ast::TypeAnnotationKind::Constructor {
+                                name: "String".to_string(),
+                                generic_args: vec![],
+                            },
+                        }),
+                        generic_params: vec![],
+                        meta: empty_meta(),
+                    }],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Struct {
+                    name: "MyType".to_string(),
+                    generic_params: vec![],
+                    fields: vec![],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Impl {
+                    trait_name: Some("Display".to_string()),
+                    for_type: ast::TypeAnnotation {
+                        meta: empty_meta(),
+                        kind: ast::TypeAnnotationKind::Constructor {
+                            name: "MyType".to_string(),
+                            generic_args: vec![],
+                        },
+                    },
+                    methods: vec![ast::AstNode {
+                        meta: empty_meta(),
+                        kind: ast::AstNodeKind::Function {
+                            name: "show".to_string(),
+                            args: vec![ast::FunctionParam {
+                                name: "self".to_string(),
+                                type_annotation: ast::TypeAnnotation {
+                                    meta: empty_meta(),
+                                    kind: ast::TypeAnnotationKind::Constructor {
+                                        name: "MyType".to_string(),
+                                        generic_args: vec![],
+                                    },
+                                },
+                            }],
+                            return_type: Some(ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "String".to_string(),
+                                    generic_args: vec![],
+                                },
+                            }),
+                            generic_params: vec![],
+                            body: vec![ast::Expr {
+                                meta: empty_meta(),
+                                kind: ast::ExprKind::Literal(ast::Literal::String(
+                                    "hello".to_string(),
+                                )),
+                            }],
+                        },
+                    }],
+                },
+            },
+        ];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_issue5_self_in_trait_signatures() {
+        let program = vec![
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Trait {
+                    name: "Clone".to_string(),
+                    generic_params: vec![],
+                    methods: vec![ast::MethodSignature {
+                        name: "clone".to_string(),
+                        args: vec![ast::MethodParam::SelfParam],
+                        return_type: Some(ast::TypeAnnotation {
+                            meta: empty_meta(),
+                            kind: ast::TypeAnnotationKind::Constructor {
+                                name: "Self".to_string(),
+                                generic_args: vec![],
+                            },
+                        }),
+                        generic_params: vec![],
+                        meta: empty_meta(),
+                    }],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Struct {
+                    name: "Point".to_string(),
+                    generic_params: vec![],
+                    fields: vec![ast::StructField {
+                        name: "x".to_string(),
+                        type_annotation: ast::TypeAnnotation {
+                            meta: empty_meta(),
+                            kind: ast::TypeAnnotationKind::Constructor {
+                                name: "i32".to_string(),
+                                generic_args: vec![],
+                            },
+                        },
+                        meta: empty_meta(),
+                    }],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Impl {
+                    trait_name: Some("Clone".to_string()),
+                    for_type: ast::TypeAnnotation {
+                        meta: empty_meta(),
+                        kind: ast::TypeAnnotationKind::Constructor {
+                            name: "Point".to_string(),
+                            generic_args: vec![],
+                        },
+                    },
+                    methods: vec![ast::AstNode {
+                        meta: empty_meta(),
+                        kind: ast::AstNodeKind::Function {
+                            name: "clone".to_string(),
+                            args: vec![ast::FunctionParam {
+                                name: "self".to_string(),
+                                type_annotation: ast::TypeAnnotation {
+                                    meta: empty_meta(),
+                                    kind: ast::TypeAnnotationKind::Constructor {
+                                        name: "Point".to_string(),
+                                        generic_args: vec![],
+                                    },
+                                },
+                            }],
+                            return_type: Some(ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "Point".to_string(),
+                                    generic_args: vec![],
+                                },
+                            }),
+                            generic_params: vec![],
+                            body: vec![ast::Expr {
+                                meta: empty_meta(),
+                                kind: ast::ExprKind::Variable("self".to_string()),
+                            }],
+                        },
+                    }],
+                },
+            },
+        ];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_issue7_generic_struct_init_validation() {
+        let program = vec![
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Struct {
+                    name: "Pair".to_string(),
+                    generic_params: vec![ast::GenericParam {
+                        name: "T".to_string(),
+                        constraints: vec![],
+                    }],
+                    fields: vec![
+                        ast::StructField {
+                            name: "first".to_string(),
+                            type_annotation: ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "T".to_string(),
+                                    generic_args: vec![],
+                                },
+                            },
+                            meta: empty_meta(),
+                        },
+                        ast::StructField {
+                            name: "second".to_string(),
+                            type_annotation: ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "T".to_string(),
+                                    generic_args: vec![],
+                                },
+                            },
+                            meta: empty_meta(),
+                        },
+                    ],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Function {
+                    name: "test".to_string(),
+                    args: vec![],
+                    return_type: None,
+                    generic_params: vec![],
+                    body: vec![ast::Expr {
+                        meta: empty_meta(),
+                        kind: ast::ExprKind::StructInit {
+                            name: "Pair".to_string(),
+                            fields: vec![
+                                ast::StructInitField::Field {
+                                    name: "first".to_string(),
+                                    value: ast::Expr {
+                                        meta: empty_meta(),
+                                        kind: ast::ExprKind::Literal(ast::Literal::Integer(1)),
+                                    },
+                                },
+                                ast::StructInitField::Field {
+                                    name: "second".to_string(),
+                                    value: ast::Expr {
+                                        meta: empty_meta(),
+                                        kind: ast::ExprKind::Literal(ast::Literal::Integer(2)),
+                                    },
+                                },
+                            ],
+                        },
+                    }],
+                },
+            },
+        ];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_issue12_pattern_matching_enum_variants() {
+        let program = vec![
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Enum {
+                    name: "Maybe".to_string(),
+                    generic_params: vec![ast::GenericParam {
+                        name: "T".to_string(),
+                        constraints: vec![],
+                    }],
+                    variants: vec![
+                        ast::EnumVariant::Tuple {
+                            name: "Just".to_string(),
+                            fields: vec![ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "T".to_string(),
+                                    generic_args: vec![],
+                                },
+                            }],
+                            meta: empty_meta(),
+                        },
+                        ast::EnumVariant::Tuple {
+                            name: "Nothing".to_string(),
+                            fields: vec![],
+                            meta: empty_meta(),
+                        },
+                    ],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Function {
+                    name: "test".to_string(),
+                    args: vec![ast::FunctionParam {
+                        name: "m".to_string(),
+                        type_annotation: ast::TypeAnnotation {
+                            meta: empty_meta(),
+                            kind: ast::TypeAnnotationKind::Constructor {
+                                name: "Maybe".to_string(),
+                                generic_args: vec![ast::TypeAnnotation {
+                                    meta: empty_meta(),
+                                    kind: ast::TypeAnnotationKind::Constructor {
+                                        name: "i32".to_string(),
+                                        generic_args: vec![],
+                                    },
+                                }],
+                            },
+                        },
+                    }],
+                    return_type: None,
+                    generic_params: vec![],
+                    body: vec![ast::Expr {
+                        meta: empty_meta(),
+                        kind: ast::ExprKind::Match {
+                            value: Box::new(ast::Expr {
+                                meta: empty_meta(),
+                                kind: ast::ExprKind::Variable("m".to_string()),
+                            }),
+                            arms: vec![
+                                ast::MatchArm {
+                                    pattern: ast::Pattern::EnumVariant {
+                                        name: "Just".to_string(),
+                                        fields: vec![ast::Pattern::Variable("x".to_string())],
+                                    },
+                                    guard: None,
+                                    body: vec![ast::Expr {
+                                        meta: empty_meta(),
+                                        kind: ast::ExprKind::Variable("x".to_string()),
+                                    }],
+                                },
+                                ast::MatchArm {
+                                    pattern: ast::Pattern::EnumVariant {
+                                        name: "Nothing".to_string(),
+                                        fields: vec![],
+                                    },
+                                    guard: None,
+                                    body: vec![ast::Expr {
+                                        meta: empty_meta(),
+                                        kind: ast::ExprKind::Literal(ast::Literal::Integer(0)),
+                                    }],
+                                },
+                            ],
+                        },
+                    }],
+                },
+            },
+        ];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_issue16_generic_type_arg_constraint_checking() {
+        let program = vec![
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Trait {
+                    name: "Display".to_string(),
+                    generic_params: vec![],
+                    methods: vec![],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Struct {
+                    name: "BadStruct".to_string(),
+                    generic_params: vec![ast::GenericParam {
+                        name: "T".to_string(),
+                        constraints: vec![],
+                    }],
+                    fields: vec![],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Impl {
+                    trait_name: Some("Display".to_string()),
+                    for_type: ast::TypeAnnotation {
+                        meta: empty_meta(),
+                        kind: ast::TypeAnnotationKind::Constructor {
+                            name: "BadStruct".to_string(),
+                            generic_args: vec![ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "i32".to_string(),
+                                    generic_args: vec![],
+                                },
+                            }],
+                        },
+                    },
+                    methods: vec![],
+                },
+            },
+        ];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_critical1_method_generics_as_type_vars() {
+        let program = vec![
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Trait {
+                    name: "Converter".to_string(),
+                    generic_params: vec![],
+                    methods: vec![ast::MethodSignature {
+                        name: "convert".to_string(),
+                        args: vec![
+                            ast::MethodParam::SelfParam,
+                            ast::MethodParam::TypedParam {
+                                name: "x".to_string(),
+                                type_annotation: ast::TypeAnnotation {
+                                    meta: empty_meta(),
+                                    kind: ast::TypeAnnotationKind::Constructor {
+                                        name: "U".to_string(),
+                                        generic_args: vec![],
+                                    },
+                                },
+                            },
+                        ],
+                        return_type: Some(ast::TypeAnnotation {
+                            meta: empty_meta(),
+                            kind: ast::TypeAnnotationKind::Constructor {
+                                name: "U".to_string(),
+                                generic_args: vec![],
+                            },
+                        }),
+                        generic_params: vec![ast::GenericParam {
+                            name: "U".to_string(),
+                            constraints: vec![],
+                        }],
+                        meta: empty_meta(),
+                    }],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Struct {
+                    name: "Wrapper".to_string(),
+                    generic_params: vec![],
+                    fields: vec![],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Impl {
+                    trait_name: Some("Converter".to_string()),
+                    for_type: ast::TypeAnnotation {
+                        meta: empty_meta(),
+                        kind: ast::TypeAnnotationKind::Constructor {
+                            name: "Wrapper".to_string(),
+                            generic_args: vec![],
+                        },
+                    },
+                    methods: vec![ast::AstNode {
+                        meta: empty_meta(),
+                        kind: ast::AstNodeKind::Function {
+                            name: "convert".to_string(),
+                            args: vec![
+                                ast::FunctionParam {
+                                    name: "self".to_string(),
+                                    type_annotation: ast::TypeAnnotation {
+                                        meta: empty_meta(),
+                                        kind: ast::TypeAnnotationKind::Constructor {
+                                            name: "Wrapper".to_string(),
+                                            generic_args: vec![],
+                                        },
+                                    },
+                                },
+                                ast::FunctionParam {
+                                    name: "x".to_string(),
+                                    type_annotation: ast::TypeAnnotation {
+                                        meta: empty_meta(),
+                                        kind: ast::TypeAnnotationKind::Constructor {
+                                            name: "i32".to_string(),
+                                            generic_args: vec![],
+                                        },
+                                    },
+                                },
+                            ],
+                            return_type: Some(ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "i32".to_string(),
+                                    generic_args: vec![],
+                                },
+                            }),
+                            generic_params: vec![],
+                            body: vec![ast::Expr {
+                                meta: empty_meta(),
+                                kind: ast::ExprKind::Variable("x".to_string()),
+                            }],
+                        },
+                    }],
+                },
+            },
+        ];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_ok());
+
+        let typed_program = result.unwrap();
+        if let typed_ast::TypedAstNodeKind::Trait { methods, .. } = &typed_program[0].kind {
+            assert_eq!(methods.len(), 1);
+            let method = &methods[0];
+            assert_eq!(method.args.len(), 2);
+            match &method.args[1] {
+                typed_ast::TypedMethodParam::TypedParam { typ, .. } => {
+                    if let typed_ast::Type::Var(_) = typ {
+                    } else {
+                        panic!("Method generic param should be Type::Var, not Type::Con");
+                    }
+                }
+                _ => panic!("Expected TypedParam"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_critical2_method_generic_constraints_validated() {
+        let program = vec![ast::AstNode {
+            meta: empty_meta(),
+            kind: ast::AstNodeKind::Trait {
+                name: "ValidTrait".to_string(),
+                generic_params: vec![],
+                methods: vec![ast::MethodSignature {
+                    name: "process".to_string(),
+                    args: vec![
+                        ast::MethodParam::SelfParam,
+                        ast::MethodParam::TypedParam {
+                            name: "x".to_string(),
+                            type_annotation: ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "T".to_string(),
+                                    generic_args: vec![],
+                                },
+                            },
+                        },
+                    ],
+                    return_type: Some(ast::TypeAnnotation {
+                        meta: empty_meta(),
+                        kind: ast::TypeAnnotationKind::Constructor {
+                            name: "T".to_string(),
+                            generic_args: vec![],
+                        },
+                    }),
+                    generic_params: vec![ast::GenericParam {
+                        name: "T".to_string(),
+                        constraints: vec![],
+                    }],
+                    meta: empty_meta(),
+                }],
+            },
+        }];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_critical4_self_as_implicit_generic() {
+        let program = vec![
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Trait {
+                    name: "Clone".to_string(),
+                    generic_params: vec![],
+                    methods: vec![ast::MethodSignature {
+                        name: "clone".to_string(),
+                        args: vec![ast::MethodParam::SelfParam],
+                        return_type: Some(ast::TypeAnnotation {
+                            meta: empty_meta(),
+                            kind: ast::TypeAnnotationKind::Constructor {
+                                name: "Self".to_string(),
+                                generic_args: vec![],
+                            },
+                        }),
+                        generic_params: vec![],
+                        meta: empty_meta(),
+                    }],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Struct {
+                    name: "Value".to_string(),
+                    generic_params: vec![],
+                    fields: vec![],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Impl {
+                    trait_name: Some("Clone".to_string()),
+                    for_type: ast::TypeAnnotation {
+                        meta: empty_meta(),
+                        kind: ast::TypeAnnotationKind::Constructor {
+                            name: "Value".to_string(),
+                            generic_args: vec![],
+                        },
+                    },
+                    methods: vec![ast::AstNode {
+                        meta: empty_meta(),
+                        kind: ast::AstNodeKind::Function {
+                            name: "clone".to_string(),
+                            args: vec![ast::FunctionParam {
+                                name: "self".to_string(),
+                                type_annotation: ast::TypeAnnotation {
+                                    meta: empty_meta(),
+                                    kind: ast::TypeAnnotationKind::Constructor {
+                                        name: "Value".to_string(),
+                                        generic_args: vec![],
+                                    },
+                                },
+                            }],
+                            return_type: Some(ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "Value".to_string(),
+                                    generic_args: vec![],
+                                },
+                            }),
+                            generic_params: vec![],
+                            body: vec![ast::Expr {
+                                meta: empty_meta(),
+                                kind: ast::ExprKind::Variable("self".to_string()),
+                            }],
+                        },
+                    }],
+                },
+            },
+        ];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_moderate5_method_generic_scoping() {
+        let program = vec![
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Trait {
+                    name: "Mapper".to_string(),
+                    generic_params: vec![ast::GenericParam {
+                        name: "T".to_string(),
+                        constraints: vec![],
+                    }],
+                    methods: vec![ast::MethodSignature {
+                        name: "map".to_string(),
+                        args: vec![
+                            ast::MethodParam::SelfParam,
+                            ast::MethodParam::TypedParam {
+                                name: "f".to_string(),
+                                type_annotation: ast::TypeAnnotation {
+                                    meta: empty_meta(),
+                                    kind: ast::TypeAnnotationKind::Function {
+                                        args: vec![ast::TypeAnnotation {
+                                            meta: empty_meta(),
+                                            kind: ast::TypeAnnotationKind::Constructor {
+                                                name: "T".to_string(),
+                                                generic_args: vec![],
+                                            },
+                                        }],
+                                        return_type: Box::new(ast::TypeAnnotation {
+                                            meta: empty_meta(),
+                                            kind: ast::TypeAnnotationKind::Constructor {
+                                                name: "U".to_string(),
+                                                generic_args: vec![],
+                                            },
+                                        }),
+                                    },
+                                },
+                            },
+                        ],
+                        return_type: Some(ast::TypeAnnotation {
+                            meta: empty_meta(),
+                            kind: ast::TypeAnnotationKind::Constructor {
+                                name: "U".to_string(),
+                                generic_args: vec![],
+                            },
+                        }),
+                        generic_params: vec![ast::GenericParam {
+                            name: "U".to_string(),
+                            constraints: vec![],
+                        }],
+                        meta: empty_meta(),
+                    }],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Struct {
+                    name: "Container".to_string(),
+                    generic_params: vec![ast::GenericParam {
+                        name: "T".to_string(),
+                        constraints: vec![],
+                    }],
+                    fields: vec![ast::StructField {
+                        name: "value".to_string(),
+                        type_annotation: ast::TypeAnnotation {
+                            meta: empty_meta(),
+                            kind: ast::TypeAnnotationKind::Constructor {
+                                name: "T".to_string(),
+                                generic_args: vec![],
+                            },
+                        },
+                        meta: empty_meta(),
+                    }],
+                },
+            },
+            ast::AstNode {
+                meta: empty_meta(),
+                kind: ast::AstNodeKind::Impl {
+                    trait_name: Some("Mapper".to_string()),
+                    for_type: ast::TypeAnnotation {
+                        meta: empty_meta(),
+                        kind: ast::TypeAnnotationKind::Constructor {
+                            name: "Container".to_string(),
+                            generic_args: vec![ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "i32".to_string(),
+                                    generic_args: vec![],
+                                },
+                            }],
+                        },
+                    },
+                    methods: vec![ast::AstNode {
+                        meta: empty_meta(),
+                        kind: ast::AstNodeKind::Function {
+                            name: "map".to_string(),
+                            args: vec![
+                                ast::FunctionParam {
+                                    name: "self".to_string(),
+                                    type_annotation: ast::TypeAnnotation {
+                                        meta: empty_meta(),
+                                        kind: ast::TypeAnnotationKind::Constructor {
+                                            name: "Container".to_string(),
+                                            generic_args: vec![ast::TypeAnnotation {
+                                                meta: empty_meta(),
+                                                kind: ast::TypeAnnotationKind::Constructor {
+                                                    name: "i32".to_string(),
+                                                    generic_args: vec![],
+                                                },
+                                            }],
+                                        },
+                                    },
+                                },
+                                ast::FunctionParam {
+                                    name: "f".to_string(),
+                                    type_annotation: ast::TypeAnnotation {
+                                        meta: empty_meta(),
+                                        kind: ast::TypeAnnotationKind::Function {
+                                            args: vec![ast::TypeAnnotation {
+                                                meta: empty_meta(),
+                                                kind: ast::TypeAnnotationKind::Constructor {
+                                                    name: "i32".to_string(),
+                                                    generic_args: vec![],
+                                                },
+                                            }],
+                                            return_type: Box::new(ast::TypeAnnotation {
+                                                meta: empty_meta(),
+                                                kind: ast::TypeAnnotationKind::Constructor {
+                                                    name: "i32".to_string(),
+                                                    generic_args: vec![],
+                                                },
+                                            }),
+                                        },
+                                    },
+                                },
+                            ],
+                            return_type: Some(ast::TypeAnnotation {
+                                meta: empty_meta(),
+                                kind: ast::TypeAnnotationKind::Constructor {
+                                    name: "i32".to_string(),
+                                    generic_args: vec![],
+                                },
+                            }),
+                            generic_params: vec![],
+                            body: vec![ast::Expr {
+                                meta: empty_meta(),
+                                kind: ast::ExprKind::FunctionCall {
+                                    function: Box::new(ast::Expr {
+                                        meta: empty_meta(),
+                                        kind: ast::ExprKind::Variable("f".to_string()),
+                                    }),
+                                    args: vec![ast::Expr {
+                                        meta: empty_meta(),
+                                        kind: ast::ExprKind::DotAccess {
+                                            value: Box::new(ast::Expr {
+                                                meta: empty_meta(),
+                                                kind: ast::ExprKind::Variable("self".to_string()),
+                                            }),
+                                            field: "value".to_string(),
+                                        },
+                                    }],
+                                },
+                            }],
+                        },
+                    }],
+                },
+            },
+        ];
+        let checker = typechecker::TypeChecker::new();
+        let result = checker.typecheck(program);
+        assert!(result.is_ok());
+    }
 }
