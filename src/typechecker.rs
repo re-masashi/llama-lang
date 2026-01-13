@@ -659,7 +659,15 @@ impl TypeChecker {
                 let mut generic_map = HashMap::new();
                 for gp in generic_params {
                     let tv = self.fresh_var();
-                    generic_map.insert(gp.name.clone(), tv);
+                    generic_map.insert(gp.name.clone(), tv.clone());
+
+                    for constraint in &gp.constraints {
+                        if let ast::TypeAnnotationKind::Constructor { name, .. } = &constraint.kind
+                        {
+                            self.constraints
+                                .push(Constraint::Class(name.clone(), vec![tv.clone()]));
+                        }
+                    }
                 }
                 let old_generic_mapping = std::mem::replace(&mut self.generic_mapping, generic_map);
 
@@ -731,6 +739,21 @@ impl TypeChecker {
                 generic_params,
                 fields,
             } => {
+                let mut generic_map = HashMap::new();
+                for gp in generic_params {
+                    let tv = self.fresh_var();
+                    generic_map.insert(gp.name.clone(), tv.clone());
+
+                    for constraint in &gp.constraints {
+                        if let ast::TypeAnnotationKind::Constructor { name, .. } = &constraint.kind
+                        {
+                            self.constraints
+                                .push(Constraint::Class(name.clone(), vec![tv.clone()]));
+                        }
+                    }
+                }
+                let old_generic_mapping = std::mem::replace(&mut self.generic_mapping, generic_map);
+
                 let field_types = fields
                     .iter()
                     .map(|f| {
@@ -743,9 +766,11 @@ impl TypeChecker {
                 self.struct_env.insert(name.clone(), field_types);
                 let con_type = typed_ast::Type::Con {
                     name: name.clone(),
-                    args: vec![],
+                    args: self.generic_mapping.values().cloned().collect(),
                 };
                 self.unify(&typ, &con_type);
+
+                self.generic_mapping = old_generic_mapping;
                 typed_ast::TypedAstNodeKind::Struct {
                     name: name.clone(),
                     generic_params: self.convert_generic_params(generic_params),
@@ -765,6 +790,21 @@ impl TypeChecker {
                 generic_params,
                 methods,
             } => {
+                let mut generic_map = HashMap::new();
+                for gp in generic_params {
+                    let tv = self.fresh_var();
+                    generic_map.insert(gp.name.clone(), tv.clone());
+
+                    for constraint in &gp.constraints {
+                        if let ast::TypeAnnotationKind::Constructor { name, .. } = &constraint.kind
+                        {
+                            self.constraints
+                                .push(Constraint::Class(name.clone(), vec![tv.clone()]));
+                        }
+                    }
+                }
+                let old_generic_mapping = std::mem::replace(&mut self.generic_mapping, generic_map);
+
                 let mut method_types = HashMap::new();
                 let typed_methods = methods
                     .iter()
@@ -818,6 +858,9 @@ impl TypeChecker {
                     })
                     .collect();
                 self.trait_env.insert(name.clone(), method_types);
+
+                self.generic_mapping = old_generic_mapping;
+
                 let typ = self.fresh_var();
                 typed_ast::TypedAstNodeKind::Trait {
                     name: name.clone(),
@@ -830,6 +873,21 @@ impl TypeChecker {
                 generic_params,
                 variants,
             } => {
+                let mut generic_map = HashMap::new();
+                for gp in generic_params {
+                    let tv = self.fresh_var();
+                    generic_map.insert(gp.name.clone(), tv.clone());
+
+                    for constraint in &gp.constraints {
+                        if let ast::TypeAnnotationKind::Constructor { name, .. } = &constraint.kind
+                        {
+                            self.constraints
+                                .push(Constraint::Class(name.clone(), vec![tv.clone()]));
+                        }
+                    }
+                }
+                let old_generic_mapping = std::mem::replace(&mut self.generic_mapping, generic_map);
+
                 let variant_names = variants
                     .iter()
                     .map(|v| match v {
@@ -838,43 +896,52 @@ impl TypeChecker {
                     })
                     .collect();
                 self.enum_env.insert(name.clone(), variant_names);
-                let typ = self.fresh_var();
+                let con_type = typed_ast::Type::Con {
+                    name: name.clone(),
+                    args: self.generic_mapping.values().cloned().collect(),
+                };
+                self.unify(&typ, &con_type);
+
+                let typed_variants = variants
+                    .iter()
+                    .map(|v| match v {
+                        ast::EnumVariant::Tuple { name, fields, meta } => {
+                            typed_ast::TypedEnumVariant::Tuple {
+                                name: name.clone(),
+                                fields: fields
+                                    .iter()
+                                    .map(|f| self.convert_type_annotation(f))
+                                    .collect(),
+                                meta: meta.clone(),
+                                typ: self.fresh_var(),
+                            }
+                        }
+                        ast::EnumVariant::Struct { name, fields, meta } => {
+                            typed_ast::TypedEnumVariant::Struct {
+                                name: name.clone(),
+                                fields: fields
+                                    .iter()
+                                    .map(|f| typed_ast::TypedStructField {
+                                        name: f.name.clone(),
+                                        type_annotation: self
+                                            .convert_type_annotation(&f.type_annotation),
+                                        meta: f.meta.clone(),
+                                        typ: self.convert_to_internal_type(&f.type_annotation),
+                                    })
+                                    .collect(),
+                                meta: meta.clone(),
+                                typ: self.fresh_var(),
+                            }
+                        }
+                    })
+                    .collect();
+
+                self.generic_mapping = old_generic_mapping;
+
                 typed_ast::TypedAstNodeKind::Enum {
                     name: name.clone(),
                     generic_params: self.convert_generic_params(generic_params),
-                    variants: variants
-                        .iter()
-                        .map(|v| match v {
-                            ast::EnumVariant::Tuple { name, fields, meta } => {
-                                typed_ast::TypedEnumVariant::Tuple {
-                                    name: name.clone(),
-                                    fields: fields
-                                        .iter()
-                                        .map(|f| self.convert_type_annotation(f))
-                                        .collect(),
-                                    meta: meta.clone(),
-                                    typ: self.fresh_var(),
-                                }
-                            }
-                            ast::EnumVariant::Struct { name, fields, meta } => {
-                                typed_ast::TypedEnumVariant::Struct {
-                                    name: name.clone(),
-                                    fields: fields
-                                        .iter()
-                                        .map(|f| typed_ast::TypedStructField {
-                                            name: f.name.clone(),
-                                            type_annotation: self
-                                                .convert_type_annotation(&f.type_annotation),
-                                            meta: f.meta.clone(),
-                                            typ: self.convert_to_internal_type(&f.type_annotation),
-                                        })
-                                        .collect(),
-                                    meta: meta.clone(),
-                                    typ: self.fresh_var(),
-                                }
-                            }
-                        })
-                        .collect(),
+                    variants: typed_variants,
                 }
             }
             ast::AstNodeKind::Impl {
@@ -887,11 +954,29 @@ impl TypeChecker {
                         return Err(format!("trait {} not found", trait_name));
                     }
                 }
-                let for_type_name = match &for_type.kind {
-                    ast::TypeAnnotationKind::Constructor { name, .. } => name.clone(),
+
+                let impl_type = self.convert_to_internal_type(for_type);
+
+                let for_type_key = match &for_type.kind {
+                    ast::TypeAnnotationKind::Constructor { name, generic_args } => {
+                        if generic_args.is_empty() {
+                            name.clone()
+                        } else {
+                            let args_str = generic_args
+                                .iter()
+                                .map(|arg| match &arg.kind {
+                                    ast::TypeAnnotationKind::Constructor { name, .. } => {
+                                        name.clone()
+                                    }
+                                    _ => "_".to_string(),
+                                })
+                                .collect::<Vec<_>>()
+                                .join(",");
+                            format!("{}<{}>", name, args_str)
+                        }
+                    }
                     _ => return Err("impl for_type must be a constructor".to_string()),
                 };
-                let impl_type = self.convert_to_internal_type(for_type);
 
                 let old_impl_type =
                     std::mem::replace(&mut self.current_impl_type, Some(impl_type.clone()));
@@ -919,7 +1004,7 @@ impl TypeChecker {
                 self.impl_env
                     .get_mut(trait_key)
                     .unwrap()
-                    .insert(for_type_name.clone(), impl_method_types);
+                    .insert(for_type_key.clone(), impl_method_types);
 
                 let typ = self.fresh_var();
                 typed_ast::TypedAstNodeKind::Impl {
@@ -1651,12 +1736,21 @@ impl TypeChecker {
     fn convert_to_internal_type(&mut self, ta: &ast::TypeAnnotation) -> typed_ast::Type {
         match &ta.kind {
             ast::TypeAnnotationKind::Constructor { name, generic_args } => {
-                if let Some(t) = self.generic_mapping.get(name) {
+                if name == "Self" {
+                    if let Some(impl_type) = &self.current_impl_type {
+                        impl_type.clone()
+                    } else {
+                        self.fresh_var()
+                    }
+                } else if let Some(t) = self.generic_mapping.get(name) {
                     t.clone()
                 } else {
                     typed_ast::Type::Con {
                         name: name.clone(),
-                        args: generic_args.iter().map(|_| self.fresh_var()).collect(),
+                        args: generic_args
+                            .iter()
+                            .map(|arg| self.convert_to_internal_type(arg))
+                            .collect(),
                     }
                 }
             }
@@ -1697,7 +1791,10 @@ impl TypeChecker {
                 ast::TypeAnnotationKind::Constructor { name, generic_args } => {
                     typed_ast::TypeAnnotationKind::Constructor {
                         name: name.clone(),
-                        generic_args: self.convert_generic_params(generic_args),
+                        generic_args: generic_args
+                            .iter()
+                            .map(|arg| self.convert_type_annotation(arg))
+                            .collect(),
                     }
                 }
                 ast::TypeAnnotationKind::Tuple(ts) => typed_ast::TypeAnnotationKind::Tuple(
@@ -1805,38 +1902,74 @@ impl TypeChecker {
                     self.substitution.unify(&t1, &t2)?;
                 }
                 Constraint::Class(trait_name, types) => {
-                    if types.len() == 1 {
-                        if let typed_ast::Type::Con { name, .. } = &types[0] {
-                            if let Some(type_map) = self.impl_env.get(trait_name) {
-                                if let Some(methods) = type_map.get(name) {
-                                    if let Some(trait_methods) = self.trait_env.get(trait_name) {
-                                        for (method_name, trait_method_type) in trait_methods {
-                                            if let Some(impl_method_type) = methods.get(method_name)
-                                            {
-                                                self.substitution
-                                                    .unify(trait_method_type, impl_method_type)?;
-                                            } else {
-                                                return Err(format!(
-                                                    "impl for trait {} for type {} missing method {}",
-                                                    trait_name, name, method_name
-                                                ));
-                                            }
-                                        }
-                                    }
+                    if let Some(type_map) = self.impl_env.get(trait_name) {
+                        let type_key = if types.len() == 1 {
+                            if let typed_ast::Type::Con { name, args } = &types[0] {
+                                if args.is_empty() {
+                                    name.clone()
                                 } else {
-                                    return Err(format!(
-                                        "no impl for trait {} for type {}",
-                                        trait_name, name
-                                    ));
+                                    let args_str = args
+                                        .iter()
+                                        .map(|a| match a {
+                                            typed_ast::Type::Con { name, .. } => name.clone(),
+                                            _ => "_".to_string(),
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join(",");
+                                    format!("{}<{}>", name, args_str)
                                 }
                             } else {
-                                return Err(format!("trait {} not defined", trait_name));
+                                return Err("class constraint on non-con type".to_string());
                             }
                         } else {
-                            return Err("class constraint on non-con type".to_string());
+                            types
+                                .iter()
+                                .map(|t| match t {
+                                    typed_ast::Type::Con { name, args } => {
+                                        if args.is_empty() {
+                                            name.clone()
+                                        } else {
+                                            let args_str = args
+                                                .iter()
+                                                .map(|a| match a {
+                                                    typed_ast::Type::Con { name, .. } => {
+                                                        name.clone()
+                                                    }
+                                                    _ => "_".to_string(),
+                                                })
+                                                .collect::<Vec<_>>()
+                                                .join(",");
+                                            format!("{}<{}>", name, args_str)
+                                        }
+                                    }
+                                    _ => "_".to_string(),
+                                })
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        };
+
+                        if let Some(methods) = type_map.get(&type_key) {
+                            if let Some(trait_methods) = self.trait_env.get(trait_name) {
+                                for (method_name, trait_method_type) in trait_methods {
+                                    if let Some(impl_method_type) = methods.get(method_name) {
+                                        self.substitution
+                                            .unify(trait_method_type, impl_method_type)?;
+                                    } else {
+                                        return Err(format!(
+                                            "impl for trait {} for type {} missing method {}",
+                                            trait_name, type_key, method_name
+                                        ));
+                                    }
+                                }
+                            }
+                        } else {
+                            return Err(format!(
+                                "no impl for trait {} for type {}",
+                                trait_name, type_key
+                            ));
                         }
                     } else {
-                        return Err("multi-param traits not supported".to_string());
+                        return Err(format!("trait {} not defined", trait_name));
                     }
                 }
             }

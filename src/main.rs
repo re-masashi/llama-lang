@@ -24,7 +24,7 @@ fn main() {
                 println!("{:?}", node);
             }
 
-            let mut checker = TypeChecker::new();
+            let checker = TypeChecker::new();
             match checker.typecheck(program) {
                 Ok(typed_program) => {
                     println!("Typechecked successfully!");

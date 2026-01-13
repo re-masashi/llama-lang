@@ -740,6 +740,20 @@ impl Parser {
         Ok(params)
     }
 
+    fn parse_type_arguments(&mut self) -> Result<Vec<TypeAnnotation>> {
+        let mut args = Vec::new();
+        if !self.check_type(TokenType::Greater) {
+            loop {
+                args.push(self.parse_type_annotation()?);
+                if !self.match_type(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume_type(TokenType::Greater)?;
+        Ok(args)
+    }
+
     fn parse_type_annotation(&mut self) -> Result<TypeAnnotation> {
         let start_token = self.peek().ok_or_else(|| ParseError {
             message: "Expected type annotation".to_string(),
@@ -747,10 +761,19 @@ impl Parser {
         })?;
         let start = start_token.range.start;
 
-        let name = self.consume_identifier()?;
+        let name = if self.match_type(TokenType::SelfType) {
+            "Self".to_string()
+        } else {
+            self.consume_identifier()?
+        };
 
-        let kind = if self.match_type(TokenType::Less) {
-            let generic_args = self.parse_generic_params()?;
+        let kind = if name == "Self" {
+            TypeAnnotationKind::Constructor {
+                name,
+                generic_args: vec![],
+            }
+        } else if self.match_type(TokenType::Less) {
+            let generic_args = self.parse_type_arguments()?;
             TypeAnnotationKind::Constructor { name, generic_args }
         } else if self.match_type(TokenType::LParen) {
             let mut types = Vec::new();

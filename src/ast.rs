@@ -114,7 +114,7 @@ pub struct TypeAnnotation {
 pub enum TypeAnnotationKind {
     Constructor {
         name: String,
-        generic_args: Vec<GenericParam>,
+        generic_args: Vec<TypeAnnotation>,
     },
     Tuple(Vec<TypeAnnotation>),
     Function {
