@@ -128,6 +128,12 @@ fn occurs_check(v: &typed_ast::TypeVar, t: &typed_ast::Type) -> bool {
     }
 }
 
+#[derive(Clone)]
+struct FunctionSignature {
+    generic_params: Vec<String>,
+    typ: typed_ast::Type,
+}
+
 pub struct TypeChecker {
     next_var: usize,
     constraints: Vec<Constraint>,
@@ -135,8 +141,11 @@ pub struct TypeChecker {
     env: HashMap<String, typed_ast::Type>,
     struct_env: HashMap<String, Vec<(String, typed_ast::Type)>>,
     enum_env: HashMap<String, Vec<String>>,
-    trait_env: HashMap<String, Vec<String>>,
-    impl_env: HashMap<String, HashMap<String, ()>>,
+    trait_env: HashMap<String, HashMap<String, typed_ast::Type>>,
+    impl_env: HashMap<String, HashMap<String, HashMap<String, typed_ast::Type>>>,
+    generic_mapping: HashMap<String, typed_ast::Type>,
+    function_env: HashMap<String, FunctionSignature>,
+    current_impl_type: Option<typed_ast::Type>,
 }
 
 impl TypeChecker {
@@ -150,6 +159,9 @@ impl TypeChecker {
             enum_env: HashMap::new(),
             trait_env: HashMap::new(),
             impl_env: HashMap::new(),
+            generic_mapping: HashMap::new(),
+            function_env: HashMap::new(),
+            current_impl_type: None,
         }
     }
 
@@ -644,11 +656,32 @@ impl TypeChecker {
                 generic_params,
                 body,
             } => {
+                let mut generic_map = HashMap::new();
+                for gp in generic_params {
+                    let tv = self.fresh_var();
+                    generic_map.insert(gp.name.clone(), tv);
+                }
+                let old_generic_mapping = std::mem::replace(&mut self.generic_mapping, generic_map);
+
                 let mut arg_types = vec![];
-                for param in args {
-                    let t = self.convert_to_internal_type(&param.type_annotation);
-                    self.env.insert(param.name.clone(), t.clone());
-                    arg_types.push(t);
+                let is_method = self.current_impl_type.is_some();
+                let first_is_self = is_method && args.first().map_or(false, |p| p.name == "self");
+
+                for (i, param) in args.iter().enumerate() {
+                    if first_is_self && i == 0 {
+                        if let Some(impl_type) = &self.current_impl_type {
+                            self.env.insert(param.name.clone(), impl_type.clone());
+                            arg_types.push(impl_type.clone());
+                        } else {
+                            let t = self.convert_to_internal_type(&param.type_annotation);
+                            self.env.insert(param.name.clone(), t.clone());
+                            arg_types.push(t);
+                        }
+                    } else {
+                        let t = self.convert_to_internal_type(&param.type_annotation);
+                        self.env.insert(param.name.clone(), t.clone());
+                        arg_types.push(t);
+                    }
                 }
                 let ret_type = return_type
                     .as_ref()
@@ -663,6 +696,19 @@ impl TypeChecker {
                     .iter()
                     .map(|e| self.typecheck_expr(e))
                     .collect::<Result<Vec<_>, _>>()?;
+
+                self.generic_mapping = old_generic_mapping;
+
+                let generic_names: Vec<String> =
+                    generic_params.iter().map(|gp| gp.name.clone()).collect();
+                self.function_env.insert(
+                    name.clone(),
+                    FunctionSignature {
+                        generic_params: generic_names.clone(),
+                        typ: fun_type.clone(),
+                    },
+                );
+
                 typed_ast::TypedAstNodeKind::Function {
                     name: name.clone(),
                     args: args
@@ -719,47 +765,64 @@ impl TypeChecker {
                 generic_params,
                 methods,
             } => {
-                self.trait_env.insert(
-                    name.clone(),
-                    methods.iter().map(|m| m.name.clone()).collect(),
-                );
-                let typ = self.fresh_var();
-                typed_ast::TypedAstNodeKind::Trait {
-                    name: name.clone(),
-                    generic_params: self.convert_generic_params(generic_params),
-                    methods: methods
-                        .iter()
-                        .map(|m| typed_ast::TypedMethodSignature {
-                            name: m.name.clone(),
-                            args: m
-                                .args
-                                .iter()
-                                .map(|a| match a {
-                                    ast::MethodParam::SelfParam => {
-                                        typed_ast::TypedMethodParam::SelfParam {
-                                            typ: self.fresh_var(),
-                                        }
-                                    }
-                                    ast::MethodParam::TypedParam {
-                                        name,
-                                        type_annotation,
-                                    } => typed_ast::TypedMethodParam::TypedParam {
+                let mut method_types = HashMap::new();
+                let typed_methods = methods
+                    .iter()
+                    .map(|m| {
+                        let mut arg_types = vec![];
+                        let typed_args = m
+                            .args
+                            .iter()
+                            .map(|a| match a {
+                                ast::MethodParam::SelfParam => {
+                                    let self_type = self.fresh_var();
+                                    arg_types.push(self_type.clone());
+                                    typed_ast::TypedMethodParam::SelfParam { typ: self_type }
+                                }
+                                ast::MethodParam::TypedParam {
+                                    name,
+                                    type_annotation,
+                                } => {
+                                    let param_type = self.convert_to_internal_type(type_annotation);
+                                    arg_types.push(param_type.clone());
+                                    typed_ast::TypedMethodParam::TypedParam {
                                         name: name.clone(),
                                         type_annotation: self
                                             .convert_type_annotation(type_annotation),
-                                        typ: self.convert_to_internal_type(type_annotation),
-                                    },
-                                })
-                                .collect(),
+                                        typ: param_type,
+                                    }
+                                }
+                            })
+                            .collect();
+                        let ret_type = m
+                            .return_type
+                            .as_ref()
+                            .map(|rt| self.convert_to_internal_type(rt))
+                            .unwrap_or_else(|| self.fresh_var());
+                        let method_type = typed_ast::Type::Fun {
+                            args: arg_types,
+                            ret: Box::new(ret_type.clone()),
+                        };
+                        method_types.insert(m.name.clone(), method_type.clone());
+                        typed_ast::TypedMethodSignature {
+                            name: m.name.clone(),
+                            args: typed_args,
                             return_type: m
                                 .return_type
                                 .as_ref()
                                 .map(|rt| self.convert_type_annotation(rt)),
                             generic_params: self.convert_generic_params(&m.generic_params),
                             meta: m.meta.clone(),
-                            typ: self.fresh_var(),
-                        })
-                        .collect(),
+                            typ: method_type,
+                        }
+                    })
+                    .collect();
+                self.trait_env.insert(name.clone(), method_types);
+                let typ = self.fresh_var();
+                typed_ast::TypedAstNodeKind::Trait {
+                    name: name.clone(),
+                    generic_params: self.convert_generic_params(generic_params),
+                    methods: typed_methods,
                 }
             }
             ast::AstNodeKind::Enum {
@@ -824,11 +887,41 @@ impl TypeChecker {
                         return Err(format!("trait {} not found", trait_name));
                     }
                 }
+                let for_type_name = match &for_type.kind {
+                    ast::TypeAnnotationKind::Constructor { name, .. } => name.clone(),
+                    _ => return Err("impl for_type must be a constructor".to_string()),
+                };
+                let impl_type = self.convert_to_internal_type(for_type);
+
+                let old_impl_type =
+                    std::mem::replace(&mut self.current_impl_type, Some(impl_type.clone()));
+
+                let mut impl_method_types = HashMap::new();
                 let typed_methods = methods
                     .iter()
-                    .map(|m| self.typecheck_node(m))
+                    .map(|m| -> Result<typed_ast::TypedAstNode, String> {
+                        let typed_method = self.typecheck_node(m)?;
+                        if let typed_ast::TypedAstNodeKind::Function { name, .. } =
+                            &typed_method.kind
+                        {
+                            impl_method_types.insert(name.clone(), typed_method.typ.clone());
+                        }
+                        Ok(typed_method)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
-                let typ = self.convert_to_internal_type(for_type);
+
+                self.current_impl_type = old_impl_type;
+
+                let trait_key = trait_name.as_deref().unwrap_or("");
+                if !self.impl_env.contains_key(trait_key) {
+                    self.impl_env.insert(trait_key.to_string(), HashMap::new());
+                }
+                self.impl_env
+                    .get_mut(trait_key)
+                    .unwrap()
+                    .insert(for_type_name.clone(), impl_method_types);
+
+                let typ = self.fresh_var();
                 typed_ast::TypedAstNodeKind::Impl {
                     trait_name: trait_name.clone(),
                     for_type: self.convert_type_annotation(for_type),
@@ -924,7 +1017,23 @@ impl TypeChecker {
                 })
             }
             ast::ExprKind::Variable(name) => {
-                let var_typ = self.env.get(name).cloned().ok_or("unbound variable")?;
+                let var_typ = if let Some(sig) = self.function_env.get(name) {
+                    let sig = sig.clone();
+                    let old_mapping = std::mem::replace(&mut self.generic_mapping, HashMap::new());
+                    let generic_vars: Vec<(String, typed_ast::Type)> = sig
+                        .generic_params
+                        .iter()
+                        .map(|name| (name.clone(), self.fresh_var()))
+                        .collect();
+                    for (gen_name, var) in generic_vars {
+                        self.generic_mapping.insert(gen_name, var);
+                    }
+                    let instantiated_type = self.convert_type_with_mapping(&sig.typ);
+                    self.generic_mapping = old_mapping;
+                    instantiated_type
+                } else {
+                    self.env.get(name).cloned().ok_or("unbound variable")?
+                };
                 self.unify(&typ, &var_typ);
                 typed_ast::TypedExprKind::Variable(name.clone())
             }
@@ -1050,7 +1159,34 @@ impl TypeChecker {
             }
             ast::ExprKind::DotAccess { value, field } => {
                 let typed_value = self.typecheck_expr(value)?;
-                let field_typ = self.fresh_var();
+                let field_typ = match &typed_value.typ {
+                    typed_ast::Type::Con { name, .. } => {
+                        let mut method_type = None;
+
+                        for (_trait_name, type_impls) in &self.impl_env {
+                            if let Some(methods) = type_impls.get(name) {
+                                if let Some(mt) = methods.get(field) {
+                                    method_type = Some(mt.clone());
+                                    break;
+                                }
+                            }
+                        }
+
+                        if let Some(mt) = method_type {
+                            mt
+                        } else if let Some(fields) = self.struct_env.get(name) {
+                            fields
+                                .iter()
+                                .find(|(n, _)| n == field)
+                                .map(|(_, t)| t.clone())
+                                .unwrap_or_else(|| self.fresh_var())
+                        } else {
+                            self.fresh_var()
+                        }
+                    }
+                    _ => self.fresh_var(),
+                };
+                self.unify(&typ, &field_typ);
                 typed_ast::TypedExprKind::DotAccess {
                     value: Box::new(typed_value),
                     field: field.clone(),
@@ -1117,7 +1253,29 @@ impl TypeChecker {
                     args: arg_types,
                     ret: Box::new(ret_typ.clone()),
                 };
-                self.unify(&typed_function.typ, &fun_typ);
+
+                if let ast::ExprKind::Variable(func_name) = &function.kind {
+                    if let Some(sig) = self.function_env.get(func_name) {
+                        let sig = sig.clone();
+                        let old_mapping =
+                            std::mem::replace(&mut self.generic_mapping, HashMap::new());
+                        let generic_vars: Vec<(String, typed_ast::Type)> = sig
+                            .generic_params
+                            .iter()
+                            .map(|name| (name.clone(), self.fresh_var()))
+                            .collect();
+                        for (gen_name, var) in generic_vars {
+                            self.generic_mapping.insert(gen_name, var);
+                        }
+                        let instantiated_type = self.convert_type_with_mapping(&sig.typ);
+                        self.generic_mapping = old_mapping;
+                        self.unify(&typed_function.typ, &instantiated_type);
+                    } else {
+                        self.unify(&typed_function.typ, &fun_typ);
+                    }
+                } else {
+                    self.unify(&typed_function.typ, &fun_typ);
+                }
                 self.unify(&typ, &ret_typ);
                 typed_ast::TypedExprKind::FunctionCall {
                     function: Box::new(typed_function),
@@ -1262,10 +1420,21 @@ impl TypeChecker {
                 typed_ast::TypedExprKind::Return(typed_expr.map(Box::new))
             }
             ast::ExprKind::Block { expressions } => {
+                let mut old_bindings = vec![];
+                for e in expressions {
+                    if let ast::ExprKind::Let { name, .. } = &e.kind {
+                        if let Some(old) = self.env.get(name).cloned() {
+                            old_bindings.push((name.clone(), old));
+                        }
+                    }
+                }
                 let typed_expressions = expressions
                     .iter()
                     .map(|e| self.typecheck_expr(e))
                     .collect::<Result<Vec<_>, _>>()?;
+                for (name, old_typ) in old_bindings {
+                    self.env.insert(name, old_typ);
+                }
                 let block_typ = typed_expressions
                     .last()
                     .map(|e| e.typ.clone())
@@ -1481,10 +1650,16 @@ impl TypeChecker {
 
     fn convert_to_internal_type(&mut self, ta: &ast::TypeAnnotation) -> typed_ast::Type {
         match &ta.kind {
-            ast::TypeAnnotationKind::Constructor { name, generic_args } => typed_ast::Type::Con {
-                name: name.clone(),
-                args: generic_args.iter().map(|_| self.fresh_var()).collect(),
-            },
+            ast::TypeAnnotationKind::Constructor { name, generic_args } => {
+                if let Some(t) = self.generic_mapping.get(name) {
+                    t.clone()
+                } else {
+                    typed_ast::Type::Con {
+                        name: name.clone(),
+                        args: generic_args.iter().map(|_| self.fresh_var()).collect(),
+                    }
+                }
+            }
             ast::TypeAnnotationKind::Tuple(ts) => typed_ast::Type::Tuple(
                 ts.iter()
                     .map(|t| self.convert_to_internal_type(t))
@@ -1573,6 +1748,50 @@ impl TypeChecker {
         }
     }
 
+    fn convert_type_with_mapping(&self, t: &typed_ast::Type) -> typed_ast::Type {
+        match t {
+            typed_ast::Type::Var(_) => t.clone(),
+            typed_ast::Type::Con { name, args } => {
+                if let Some(mapped) = self.generic_mapping.get(name) {
+                    mapped.clone()
+                } else {
+                    typed_ast::Type::Con {
+                        name: name.clone(),
+                        args: args
+                            .iter()
+                            .map(|a| self.convert_type_with_mapping(a))
+                            .collect(),
+                    }
+                }
+            }
+            typed_ast::Type::Tuple(ts) => typed_ast::Type::Tuple(
+                ts.iter()
+                    .map(|t| self.convert_type_with_mapping(t))
+                    .collect(),
+            ),
+            typed_ast::Type::Fun { args, ret } => typed_ast::Type::Fun {
+                args: args
+                    .iter()
+                    .map(|a| self.convert_type_with_mapping(a))
+                    .collect(),
+                ret: Box::new(self.convert_type_with_mapping(ret)),
+            },
+            typed_ast::Type::Array { elem, size } => typed_ast::Type::Array {
+                elem: Box::new(self.convert_type_with_mapping(elem)),
+                size: *size,
+            },
+            typed_ast::Type::Row(fields) => typed_ast::Type::Row(
+                fields
+                    .iter()
+                    .map(|(n, t)| (n.clone(), self.convert_type_with_mapping(t)))
+                    .collect(),
+            ),
+            typed_ast::Type::Rec(t) => {
+                typed_ast::Type::Rec(Box::new(self.convert_type_with_mapping(t)))
+            }
+        }
+    }
+
     fn unify(&mut self, t1: &typed_ast::Type, t2: &typed_ast::Type) {
         if let Err(e) = self.substitution.unify(t1, t2) {
             panic!("unification error: {}", e);
@@ -1589,7 +1808,22 @@ impl TypeChecker {
                     if types.len() == 1 {
                         if let typed_ast::Type::Con { name, .. } = &types[0] {
                             if let Some(type_map) = self.impl_env.get(trait_name) {
-                                if !type_map.contains_key(name) {
+                                if let Some(methods) = type_map.get(name) {
+                                    if let Some(trait_methods) = self.trait_env.get(trait_name) {
+                                        for (method_name, trait_method_type) in trait_methods {
+                                            if let Some(impl_method_type) = methods.get(method_name)
+                                            {
+                                                self.substitution
+                                                    .unify(trait_method_type, impl_method_type)?;
+                                            } else {
+                                                return Err(format!(
+                                                    "impl for trait {} for type {} missing method {}",
+                                                    trait_name, name, method_name
+                                                ));
+                                            }
+                                        }
+                                    }
+                                } else {
                                     return Err(format!(
                                         "no impl for trait {} for type {}",
                                         trait_name, name
